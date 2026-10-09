@@ -3,22 +3,22 @@
 import * as React from 'react'
 import { Input as RsInput } from 'rsuite'
 import { cn } from '@/lib/utils'
+import { FieldLabel } from '../Label'
 import type { FieldProps } from '../types'
 
 const sizeStyles = {
-  sm: { input: 'text-sm pb-0.5', label: 'text-xs peer-placeholder-shown:text-sm' },
-  md: { input: 'text-sm pb-1', label: 'text-sm peer-placeholder-shown:text-base' },
-  lg: { input: 'text-base pb-1.5', label: 'text-base peer-placeholder-shown:text-lg' },
+  sm: { input: 'text-sm pb-0.5' },
+  md: { input: 'text-sm pb-1' },
+  lg: { input: 'text-base pb-1.5' },
 }
 
 export function StringField({ config, value, onChange, error }: FieldProps) {
   const [focused, setFocused] = React.useState(false)
   const inputId = React.useId()
-  const hasValue = value !== null && value !== undefined && value !== ''
-  const floating = focused || hasValue
 
   return (
     <div className="w-full space-y-1">
+      <FieldLabel htmlFor={inputId} label={config.label} required={config.required} error={!!error} />
       <div className="relative">
         <RsInput
           id={inputId}
@@ -45,22 +45,6 @@ export function StringField({ config, value, onChange, error }: FieldProps) {
           )}
 
         />
-        {config.label && (
-          <label
-            htmlFor={inputId}
-            className={cn(
-              'absolute left-0 z-10 origin-[0] text-muted-foreground duration-200 pointer-events-none',
-              floating
-                ? '-translate-y-3 scale-75'
-                : 'translate-y-0 scale-100',
-              focused && (error ? 'text-destructive' : 'text-primary'),
-              error && 'text-destructive',
-              sizeStyles[config.size || 'md'].label,
-            )}
-          >
-            {config.label}
-          </label>
-        )}
         <div
           className={cn(
             'absolute bottom-0 left-1/2 h-px w-full -translate-x-1/2 bg-foreground transition-transform duration-200',

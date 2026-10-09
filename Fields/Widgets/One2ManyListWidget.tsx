@@ -189,7 +189,7 @@ function FieldControl({
   const cfg: any = {
     name: f.key,
     type: f.type,
-    label: f.required ? `${f.label} *` : f.label,
+    label: f.label,
     placeholder: f.placeholder || ' ',
     required: f.required,
     readonly: f.readonly,
