@@ -1,0 +1,8 @@
+[
+  { "id": 1, "name": "John Doe", "avatar": "https://i.pravatar.cc/40?u=1", "email": "john@example.com", "group": "Sales" },
+  { "id": 2, "name": "Jane Smith", "avatar": "https://i.pravatar.cc/40?u=2", "email": "jane@example.com", "group": "Support" },
+  { "id": 3, "name": "Bob Johnson", "avatar": "https://i.pravatar.cc/40?u=3", "email": "bob@example.com", "group": "Engineering" },
+  { "id": 4, "name": "Alice Brown", "avatar": "https://i.pravatar.cc/40?u=4", "email": "alice@example.com", "group": "Sales" },
+  { "id": 5, "name": "Charlie Wilson", "avatar": "https://i.pravatar.cc/40?u=5", "email": "charlie@example.com", "group": "Engineering" },
+  { "id": 6, "name": "Diana Lee", "avatar": "https://i.pravatar.cc/40?u=6", "email": "diana@example.com", "group": "Marketing" }
+]
