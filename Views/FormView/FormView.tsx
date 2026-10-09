@@ -46,7 +46,7 @@ import { Many2ManyWidget } from '../../Fields/Widgets/Many2ManyWidget'
 import { One2ManyWidget } from '../../Fields/Widgets/One2ManyWidget'
 import { Many2OneWidget } from '../../Fields/Widgets/Many2OneWidget'
 import { TagSelectWidget } from '@/components/Base/Fields/Widgets/TagSelectWidget'
-import { PricelistItemsWidget } from '@/components/Base/Fields/Widgets/PricelistItemsWidget'
+import { One2ManyListWidget } from '../../Fields/Widgets/One2ManyListWidget'
 import {Switch} from "@/components/ui/switch";
 import { showWizardWarning, showWizardError, Wizard } from '../../Wizard'
 
@@ -55,7 +55,7 @@ registerWidget(Many2ManyWidget as any)
 registerWidget(One2ManyWidget as any)
 registerWidget(Many2OneWidget as any)
 registerWidget(TagSelectWidget as any)
-registerWidget(PricelistItemsWidget as any)
+registerWidget(One2ManyListWidget as any)
 
 
 
@@ -647,7 +647,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 many2many: ['many2many', 'json', 'array'],
                 many2many_list: ['many2many', 'json', 'array'],
                 one2many: ['one2many', 'json', 'array'],
-                pricelist_items: ['one2many', 'json', 'array'],
+                one2many_list: ['one2many', 'json', 'array'],
                 many2one: ['many2one', 'json', 'string'],
                 tag_select: ['selection', 'string'],
             }
