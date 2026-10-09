@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "Olivia Martinez", "avatar": "https://i.pravatar.cc/40?u=olivia", "email": "olivia@example.com", "tier": "Gold" },
+  { "id": 2, "name": "Ethan Williams", "avatar": "https://i.pravatar.cc/40?u=ethan", "email": "ethan@example.com", "tier": "Silver" },
+  { "id": 3, "name": "Sophia Garcia", "avatar": "https://i.pravatar.cc/40?u=sophia", "email": "sophia@example.com", "tier": "Platinum" },
+  { "id": 4, "name": "Liam Thompson", "avatar": "https://i.pravatar.cc/40?u=liam", "email": "liam@example.com", "tier": "Gold" },
+  { "id": 5, "name": "Isabella Rodriguez", "avatar": "https://i.pravatar.cc/40?u=isabella", "email": "isabella@example.com", "tier": "Bronze" }
+]

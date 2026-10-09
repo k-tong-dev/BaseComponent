@@ -1,0 +1,10 @@
+[
+  { "id": 1, "name": "Laptop Pro", "thumbnail": "https://picsum.photos/seed/laptop/40", "price": 1299, "category": "Electronics" },
+  { "id": 2, "name": "Wireless Mouse", "thumbnail": "https://picsum.photos/seed/mouse/40", "price": 49, "category": "Electronics" },
+  { "id": 3, "name": "Cotton T-Shirt", "thumbnail": "https://picsum.photos/seed/tshirt/40", "price": 29, "category": "Clothing" },
+  { "id": 4, "name": "Desk Lamp", "thumbnail": "https://picsum.photos/seed/lamp/40", "price": 89, "category": "Home" },
+  { "id": 5, "name": "Running Shoes", "thumbnail": "https://picsum.photos/seed/shoes/40", "price": 129, "category": "Clothing" },
+  { "id": 6, "name": "Coffee Maker", "thumbnail": "https://picsum.photos/seed/coffee/40", "price": 199, "category": "Home" },
+  { "id": 7, "name": "Smart Watch", "thumbnail": "https://picsum.photos/seed/watch/40", "price": 349, "category": "Electronics" },
+  { "id": 8, "name": "Yoga Mat", "thumbnail": "https://picsum.photos/seed/yoga/40", "price": 39, "category": "Sports" }
+]

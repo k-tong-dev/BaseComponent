@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "Acme Corp", "avatar": "https://ui-avatars.com/api/?name=Acme+Corp&background=6366f1&color=fff", "phone": "+1-555-0100" },
+  { "id": 2, "name": "Globex Inc", "avatar": "https://ui-avatars.com/api/?name=Globex+Inc&background=8b5cf6&color=fff", "phone": "+1-555-0101" },
+  { "id": 3, "name": "Initech", "avatar": "https://ui-avatars.com/api/?name=Initech&background=ec4899&color=fff", "phone": "+1-555-0102" },
+  { "id": 4, "name": "Umbrella Co", "avatar": "https://ui-avatars.com/api/?name=Umbrella+Co&background=f59e0b&color=fff", "phone": "+1-555-0103" },
+  { "id": 5, "name": "Cyberdyne Systems", "avatar": "https://ui-avatars.com/api/?name=Cyberdyne&background=10b981&color=fff", "phone": "+1-555-0104" }
+]
