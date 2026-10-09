@@ -47,6 +47,8 @@ import { One2ManyWidget } from '../../Fields/Widgets/One2ManyWidget'
 import { Many2OneWidget } from '../../Fields/Widgets/Many2OneWidget'
 import { TagSelectWidget } from '@/components/Base/Fields/Widgets/TagSelectWidget'
 import { One2ManyListWidget } from '../../Fields/Widgets/One2ManyListWidget'
+import { StatusBarWidget } from '../../Fields/Widgets/StatusBarWidget'
+import { useTranslate } from '../../i18n'
 import {Switch} from "@/components/ui/switch";
 import { showWizardWarning, showWizardError, Wizard } from '../../Wizard'
 
@@ -56,6 +58,7 @@ registerWidget(One2ManyWidget as any)
 registerWidget(Many2OneWidget as any)
 registerWidget(TagSelectWidget as any)
 registerWidget(One2ManyListWidget as any)
+registerWidget(StatusBarWidget as any)
 
 
 
@@ -181,6 +184,7 @@ export function FormView<T extends Entity>(props: FormViewProps<T>) {
 function FormViewContent<T extends Entity>({mode, config, initialData, entityId, serverActions, availableFields = [], onPrint, recordIds, onNavigate, onRefresh, readonly: formReadonly = false}: FormViewProps<T>) {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const translate = useTranslate()
 
     const [data, setData] = useState<MutableEntity>({} as MutableEntity)
     const [originalData, setOriginalData] = useState<MutableEntity | null>(null)
@@ -445,7 +449,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         // Validate required fields
         for (const field of config.fields) {
             if (field.required && !data[field.key]) {
-                showToast('error', 'Validation Error', `${field.label} is required`)
+                showToast('error', 'Validation Error', `${translate(field.label)} is required`)
                 return
             }
 
@@ -633,7 +637,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         // Check for validation error
         let errorMessage = null
         if (field.required && (!value || value === '')) {
-            errorMessage = `${field.label} is required`
+            errorMessage = `${translate(field.label)} is required`
         } else if (field.validation && value !== undefined && value !== null && value !== '') {
             errorMessage = field.validation(value)
         }
@@ -650,6 +654,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 one2many_list: ['one2many', 'json', 'array'],
                 many2one: ['many2one', 'json', 'string'],
                 tag_select: ['selection', 'string'],
+                statusbar: ['selection', 'string'],
             }
             const valid = compatibleTypes[field.widget]
             if (typeof window !== 'undefined' && valid && !valid.includes(field.type)) {
@@ -731,7 +736,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         files={uploadedFiles}
                         maxFiles={field.maxFiles}
                         uploadText={field.uploadText}
-                        label={field.label}
+                        label={translate(field.label)}
                         readonly={readonly}
                         error={errorMessage}
                         onRemove={removeFile}
@@ -749,7 +754,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 return (
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">{field.label}</label>
+                            <label className="text-sm font-medium">{translate(field.label)}</label>
                             {!readonly && (
                                 <Button onClick={() => addArrayItem(field.key)} size="sm" className="gap-2">
                                     <Plus className="w-4 h-4"/>
@@ -797,7 +802,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <label htmlFor={field.key} className="text-sm font-medium">
-                            {field.label}
+                            {translate(field.label)}
                         </label>
                     </div>
                 )
@@ -1222,7 +1227,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                                 "font-medium " +
                                                 "flex items-center gap-1 mb-2"
                                             }>
-                                                {field.label}
+                                                {translate(field.label)}
                                                 {field.required && <span className="text-red-500 ml-1">*</span>}
                                                 {field.helper && (
                                                     <Whisper
@@ -1281,7 +1286,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                                                 "font-medium " +
                                                                 "flex items-center gap-1 mb-2"
                                                             }>
-                                                                {field.label}
+                                                                {translate(field.label)}
                                                                 {field.required && <span className="text-red-500 ml-1">*</span>}
                                                                 {field.helper && (
                                                                     <Whisper
@@ -1320,7 +1325,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 {config.fields.filter(f => f.type === 'file').map((field) => (
                                     <div key={field.key}>
                                         <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                                            {field.label}
+                                            {translate(field.label)}
                                             {field.required && <span className="text-red-500 ml-1">*</span>}
                                             {field.helper && (
                                                 <Whisper

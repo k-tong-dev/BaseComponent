@@ -15,6 +15,7 @@ import {
   TextareaField,
 } from '@/components/Base/Fields'
 import { getFormConfig } from '../../Views/FormView/config/registry'
+import { useTranslate } from '../../i18n'
 
 /**
  * Generic inline One2Many widget (`one2many_list`), Odoo-style.
@@ -191,10 +192,11 @@ function FieldControl({
   onChange: (v: any) => void
   error?: string | null
 }) {
+  const translate = useTranslate()
   const cfg: any = {
     name: f.key,
     type: f.type,
-    label: f.label,
+    label: translate(f.label),
     placeholder: f.placeholder || ' ',
     required: f.required,
     readonly: f.readonly,
@@ -227,6 +229,7 @@ function FieldControl({
 }
 
 export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, readonly, disabled }: any) => {
+  const translate = useTranslate()
   const config: One2ManyListConfig = field?.widgetConfig || {}
   const isReadonly = Boolean(readonly || disabled)
   const allowCreate = config.allowCreate !== false && !isReadonly
@@ -385,7 +388,8 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
     )
   }
 
-  const modalTitle = config.modalTitle || targetView?.title || 'Line'
+  const modalTitle = translate(config.modalTitle || targetView?.title || 'Line')
+  const addLabel = translate(config.addLabel || 'Add Line')
   const showActions = !isReadonly
 
   return (
@@ -401,7 +405,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
                   className="p-2 text-left font-medium text-muted-foreground"
                   style={{ minWidth: col.width || 120 }}
                 >
-                  {col.title}
+                  {translate(col.title)}
                 </th>
               ))}
               {showActions && <th className="w-20 p-2" />}
@@ -449,7 +453,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
             {rows.length === 0 && (
               <tr>
                 <td colSpan={listColumns.length + 2} className="p-4 text-center text-muted-foreground">
-                  No lines yet — click “{config.addLabel || 'Add Line'}” to create one.
+                  {translate('No lines yet — click “{addLabel}” to create one.', { addLabel })}
                 </td>
               </tr>
             )}
@@ -463,13 +467,13 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
         >
-          <Plus className="h-3.5 w-3.5" /> {config.addLabel || 'Add Line'}
+          <Plus className="h-3.5 w-3.5" /> {addLabel}
         </button>
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} size="md" backdrop="static">
         <Modal.Header>
-          <Modal.Title>{editingIndex === null ? `Add ${modalTitle}` : `Edit ${modalTitle}`}</Modal.Title>
+          <Modal.Title>{editingIndex === null ? translate('Add {title}', { title: modalTitle }) : translate('Edit {title}', { title: modalTitle })}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="grid max-h-[60vh] grid-cols-2 gap-x-6 gap-y-5 overflow-y-auto px-1 py-2">
@@ -482,10 +486,10 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
         </Modal.Body>
         <Modal.Footer>
           <Button appearance="primary" onClick={save}>
-            Save
+            {translate('Save')}
           </Button>
           <Button appearance="default" onClick={() => setOpen(false)}>
-            Cancel
+            {translate('Cancel')}
           </Button>
         </Modal.Footer>
       </Modal>
