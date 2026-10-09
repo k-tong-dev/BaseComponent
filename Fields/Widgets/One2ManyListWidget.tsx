@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Modal, Button, IconButton } from 'rsuite'
+import { Modal, Button, IconButton, Toggle } from 'rsuite'
 import { Plus, Trash2, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -44,7 +44,7 @@ import { getFormConfig } from '../../Views/FormView/config/registry'
 export interface One2ManyListColumn {
   key: string
   title: string
-  type?: 'string' | 'number' | 'boolean' | 'select' | 'many2one' | 'date'
+  type?: 'string' | 'number' | 'boolean' | 'toggle' | 'checkbox' | 'select' | 'many2one' | 'date'
   width?: number
   editable?: boolean
   required?: boolean
@@ -122,7 +122,7 @@ function defaultFor(f: ModalField) {
 
 function displayValue(col: One2ManyListColumn, value: any, options: Array<{ label: any; value: any }>) {
   if (value === undefined || value === null || value === '') return '-'
-  if (col.type === 'boolean') return value ? 'Yes' : 'No'
+  if (col.type === 'boolean' || col.type === 'toggle' || col.type === 'checkbox') return value ? 'Yes' : 'No'
   if (col.type === 'many2one' || col.type === 'select') {
     const opts = col.type === 'select' ? col.options || [] : options
     return opts.find((o) => String(o.value) === String(value))?.label ?? value
@@ -162,7 +162,12 @@ function fieldsToColumns(fields: ModalField[]): One2ManyListColumn[] {
     type:
       f.type === 'selection'
         ? 'select'
-        : f.type === 'number' || f.type === 'boolean' || f.type === 'date' || f.type === 'many2one'
+        : f.type === 'number' ||
+            f.type === 'boolean' ||
+            f.type === 'toggle' ||
+            f.type === 'checkbox' ||
+            f.type === 'date' ||
+            f.type === 'many2one'
           ? (f.type as any)
           : 'string',
     options: f.options,
@@ -412,7 +417,11 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
                 <td className="p-1.5 text-muted-foreground">{idx + 1}</td>
                 {listColumns.map((col) => (
                   <td key={col.key} className="p-1.5" style={{ minWidth: col.width || 120 }}>
-                    <span className="text-xs">{displayValue(col, row[col.key], m2oOptions[col.key] || [])}</span>
+                    {col.type === 'boolean' || col.type === 'toggle' || col.type === 'checkbox' ? (
+                      <Toggle size="sm" checked={Boolean(row[col.key])} disabled />
+                    ) : (
+                      <span className="text-xs">{displayValue(col, row[col.key], m2oOptions[col.key] || [])}</span>
+                    )}
                   </td>
                 ))}
                 {showActions && (
