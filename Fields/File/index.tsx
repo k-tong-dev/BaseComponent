@@ -14,13 +14,21 @@ export interface FileFieldProps {
   label?: string
   readonly?: boolean
   error?: string | null
+  /** Accepted MIME types for the device picker (default: images). */
+  accept?: string
+  /** Folder inside the bucket that device uploads are stored under. */
+  uploadPath?: string
   onRemove: (index: number) => void
   onAssetSelected?: (asset: StorageFile) => void
 }
 
 const isImageUrl = (url: unknown): url is string =>
   typeof url === 'string' &&
-  (/\.(jpg|jpeg|png|webp|avif|gif|svg|bmp)(\?.*)?$/i.test(url) || url.startsWith('blob:'))
+  (/\.(jpg|jpeg|png|webp|avif|gif|svg|bmp)(\?.*)?$/i.test(url) || url.startsWith('blob:') || url.startsWith('data:image/'))
+
+/** A file is previewable as an image if its URL looks like one or its MIME says so. */
+const isImageFile = (file: UploadedFile): boolean =>
+  isImageUrl(file?.url) || Boolean(file?.metadata?.mimetype?.startsWith('image/'))
 
 const animationsStyle = `
 @keyframes fileEnter {
@@ -114,6 +122,8 @@ export function FileField({
   label,
   readonly,
   error,
+  accept,
+  uploadPath,
   onRemove,
   onAssetSelected,
 }: FileFieldProps) {
@@ -199,6 +209,9 @@ export function FileField({
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         maxFiles={maxFiles}
+        accept={accept}
+        uploadPath={uploadPath}
+        title={label ? `Select ${label}` : undefined}
         onSelect={(asset) => {
           onAssetSelected?.(asset)
         }}
@@ -240,7 +253,7 @@ function FilePreview({
         ${isSingle ? 'w-full' : 'w-full aspect-[4/3]'}
       `}
     >
-      {isImageUrl(file?.url) ? (
+      {isImageFile(file) ? (
         <div className={`relative w-full ${isSingle ? 'h-32 sm:h-40' : 'w-full h-full'}`}>
           <img
             src={file.url}

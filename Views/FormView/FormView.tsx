@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useRef, type ReactNode } fr
 import {useRouter, useSearchParams} from 'next/navigation'
 import {Breadcrumb, Dropdown, Loader, Popover, Whisper, Drawer, Tabs, Tab} from 'rsuite'
 import type { StorageFile } from '@/components/Base/Asset/types'
+import { deleteStorageFile } from '@/components/Base/Asset/storage-client'
 import type { UploadedFile } from '@/components/Base/Fields/File'
 import {
     ActionBar,
@@ -82,6 +83,7 @@ export interface FormField {
     component?: React.ComponentType<any>  // Custom component
     uploadText?: string
     maxFiles?: number  // Max files allowed (1 = single-file mode, replacing old on upload)
+    uploadPath?: string  // Bucket folder device uploads are stored under (e.g. 'menu-items')
     order?: number
     after?: string
     before?: string
@@ -119,6 +121,8 @@ export interface FormField {
     fetchUrl?: string
     /** Which field from the fetched options to display as the label (many2one). */
     labelKey?: string
+    /** Alternative label key used by columns/other field consumers (many2one). */
+    displayField?: string
     multiple?: boolean
     groupBy?: string
     tree?: boolean
@@ -248,6 +252,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+    // Files removed or replaced during this session — deleted from the bucket
+    // only after the record is successfully saved (so cancelling is safe).
+    const removedFilesRef = useRef<UploadedFile[]>([])
     const [showQuickActions, setShowQuickActions] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activePageTab, setActivePageTab] = useState('')
@@ -571,6 +578,20 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             }
 
             if (result.success) {
+                // Delete files that were removed/replaced during this session.
+                const removed = removedFilesRef.current
+                removedFilesRef.current = []
+                if (removed.length > 0) {
+                    void Promise.all(
+                        removed.map((f) => {
+                            const path = f.path || f.id
+                            return path && !/^(https?:|data:|blob:)/i.test(path)
+                                ? deleteStorageFile(f)
+                                : Promise.resolve()
+                        })
+                    )
+                }
+
                 if (mode === 'create') {
                     showToast('success', `${config.entityName} Created`, `${config.entityName} has been successfully created`)
                     const newId = result.data?.id
@@ -651,6 +672,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     }
 
     const removeFile = (index: number) => {
+        const removed = uploadedFiles[index]
+        if (removed && (removed.path || removed.id)) {
+            removedFilesRef.current.push(removed)
+        }
         const newUploadedFiles = uploadedFiles.filter((_, i) => i !== index)
         setUploadedFiles(newUploadedFiles)
         if (newUploadedFiles.length === 0) {
@@ -804,12 +829,18 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         files={uploadedFiles}
                         maxFiles={field.maxFiles}
                         uploadText={field.uploadText}
+                        accept={field.accept}
+                        uploadPath={field.uploadPath}
                         label={translate(field.label)}
                         readonly={readonly}
                         error={errorMessage}
                         onRemove={removeFile}
                         onAssetSelected={(asset) => {
                             if (field.maxFiles === 1) {
+                                const previous = uploadedFiles.filter((f) => f.url)[0]
+                                if (previous && (previous.path || previous.id) && (previous.path || previous.id) !== (asset.path || asset.id)) {
+                                    removedFilesRef.current.push(previous)
+                                }
                                 setUploadedFiles([{ ...asset, file: undefined }])
                             } else {
                                 setUploadedFiles(prev => [...prev, { ...asset, file: undefined }])
@@ -1068,6 +1099,8 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 readonly: readonly,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
+                                labelKey: field.labelKey,
+                                displayField: field.displayField,
                                 options: field.options?.map((o) => ({ id: o.value, name: o.label })),
                                 size: field.size,
                             }}
@@ -1160,19 +1193,27 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     // Odoo-style computed fields: recompute on every value change (onchange).
     // Computed fields are always readonly in the form; their value is still
     // submitted with the record payload.
+    //
+    // IMPORTANT: use a FUNCTIONAL update so the compute never clobbers a
+    // concurrent setData from the init/onChange effects. Without this, the
+    // initial mount with `data === {}` could compute totals from stale empty
+    // data and overwrite the initialized record with `{ total: 0 }` only.
     useEffect(() => {
         const computedFields = config.fields.filter((f) => typeof f.compute === 'function')
         if (computedFields.length === 0) return
-        let changed = false
-        const next = { ...data }
-        for (const field of computedFields) {
-            const computed = field.compute!(data)
-            if (next[field.key] !== computed) {
-                next[field.key] = computed
-                changed = true
+        setData((prev) => {
+            if (!prev || Object.keys(prev).length === 0) return prev // not initialized yet
+            let changed = false
+            const next = { ...prev }
+            for (const field of computedFields) {
+                const computed = field.compute!(next)
+                if (next[field.key] !== computed) {
+                    next[field.key] = computed
+                    changed = true
+                }
             }
-        }
-        if (changed) setData(next)
+            return changed ? next : prev
+        })
     }, [data, config.fields])
 
     // Odoo-style watchers: when a watched field changes, run its onChange

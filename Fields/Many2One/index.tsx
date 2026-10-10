@@ -11,7 +11,7 @@ const PICKER_STYLE = { borderTop: 0, borderRight: 0, borderLeft: 0, borderRadius
 function renderLabel(opt: SelectOption) {
   return opt.avatar
     ? <div className="flex items-center gap-2"><Avatar src={opt.avatar} size="xs" circle /><span>{opt.name}</span></div>
-    : opt.name
+    : <span>{opt.name}</span>
 }
 
 export function Many2OneField({ config, value, onChange, error }: FieldProps) {
@@ -29,7 +29,9 @@ export function Many2OneField({ config, value, onChange, error }: FieldProps) {
       const data = await res.json()
       const items = Array.isArray(data) ? data : data.data || data.records || data.items || []
       setOptions(items.map((item: any) => ({
-        id: item.id, name: item.name, avatar: item.avatar || item.image || item.thumbnail || item.logo_url || item.image_id?.url,
+        id: item.id,
+        name: config.labelKey || config.displayField || (config as any).labelField ? item[config.labelKey || config.displayField || (config as any).labelField] : item.name,
+        avatar: item.avatar || item.image || item.thumbnail || item.logo_url || item.image_id?.url,
       })))
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
