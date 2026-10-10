@@ -58,6 +58,19 @@ export interface One2ManyListColumn {
   /** When set, the selected option label is also stored on this row key. */
   labelKey?: string
   placeholder?: string
+  /**
+   * Odoo-style footer summary for the column (rendered in the table footer):
+   * 'sum' | 'count' | 'avg' | 'min' | 'max'. Only meaningful for numeric columns
+   * (except 'count', which works for any column).
+   */
+  summary?: 'sum' | 'count' | 'avg' | 'min' | 'max'
+  /** Format for the summary value: 'number' | 'currency' | 'percent' | custom fn. */
+  summaryFormat?: 'number' | 'currency' | 'percent' | ((v: number) => string)
+  /**
+   * Currency code shown for `summaryFormat: 'currency'`. Falls back to the
+   * parent form's `currency_code` value when omitted.
+   */
+  summaryCurrency?: string
 }
 
 export interface One2ManyListTargetField {
@@ -82,6 +95,8 @@ export interface One2ManyListTargetView {
 
 export interface One2ManyListConfig {
   columns?: One2ManyListColumn[]
+  /** Parent-form field that holds the currency code for `currency` summaries. */
+  currencyField?: string
   allowCreate?: boolean
   allowDelete?: boolean
   /** Child records endpoint / inverse FK (informational; persistence is handled by the parent form's API). */
@@ -129,6 +144,53 @@ function displayValue(col: One2ManyListColumn, value: any, options: Array<{ labe
     return opts.find((o) => String(o.value) === String(value))?.label ?? value
   }
   return String(value)
+}
+
+function formatSummaryValue(v: number, fmt?: One2ManyListColumn['summaryFormat'], currencyCode?: string): string {
+  if (typeof fmt === 'function') return fmt(v)
+  switch (fmt) {
+    case 'currency':
+      return `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyCode || 'KHR'}`.trim()
+    case 'percent':
+      return `${Number(v.toFixed(2))}%`
+    default:
+      return v.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+}
+
+/** Compute the Odoo-style footer summaries for every column that declares one. */
+function computeSummaries(
+  rows: any[],
+  columns: One2ManyListColumn[],
+  currencyCode?: string
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const col of columns) {
+    if (!col.summary) continue
+    const nums = rows
+      .map((r) => Number(r?.[col.key]))
+      .filter((n) => Number.isFinite(n))
+    let value = 0
+    switch (col.summary) {
+      case 'count':
+        value = nums.length
+        break
+      case 'sum':
+        value = nums.reduce((a, b) => a + b, 0)
+        break
+      case 'avg':
+        value = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
+        break
+      case 'min':
+        value = nums.length ? Math.min(...nums) : 0
+        break
+      case 'max':
+        value = nums.length ? Math.max(...nums) : 0
+        break
+    }
+    out[col.key] = formatSummaryValue(value, col.summaryFormat, col.summaryCurrency ?? currencyCode)
+  }
+  return out
 }
 
 function resolveTargetView(config: One2ManyListConfig): One2ManyListTargetView | null {
@@ -228,7 +290,7 @@ function FieldControl({
   }
 }
 
-export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, readonly, disabled }: any) => {
+export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, readonly, disabled, data }: any) => {
   const translate = useTranslate()
   const config: One2ManyListConfig = field?.widgetConfig || {}
   const isReadonly = Boolean(readonly || disabled)
@@ -269,6 +331,19 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
   )
 
   const rows: any[] = React.useMemo(() => (Array.isArray(value) ? value : []), [value])
+
+  // Odoo-style footer summaries (sum / count / avg / min / max per column).
+  // Currency summaries fall back to the parent form's currency code
+  // (e.g. the order's `currency_code`), or a per-column override.
+  const parentCurrencyCode =
+    (config.currencyField ? data?.[config.currencyField] : undefined) ??
+    data?.currency_code ??
+    undefined
+  const summaries = React.useMemo(
+    () => computeSummaries(rows, listColumns, parentCurrencyCode),
+    [rows, listColumns, parentCurrencyCode]
+  )
+  const hasSummaries = Object.keys(summaries).length > 0
 
   // Preload many2one options (for the modal labels + list display).
   const m2oNeeds = React.useMemo(() => {
@@ -458,17 +533,38 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
               </tr>
             )}
           </tbody>
+          {hasSummaries && (
+            <tfoot>
+              <tr className="border-t border-border bg-muted/30">
+                <td className="p-2 text-xs font-semibold text-muted-foreground">
+                  {translate('Total')}
+                </td>
+                {listColumns.map((col) => (
+                  <td
+                    key={col.key}
+                    className="p-2 text-xs font-semibold text-foreground"
+                    style={{ minWidth: col.width || 120 }}
+                  >
+                    {summaries[col.key] ?? ''}
+                  </td>
+                ))}
+                {showActions && <td />}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
       {allowCreate && (
-        <button
-          type="button"
+        <Button
+          // appearance={"primary"}
+          size="sm"
+          // color={"violet"}
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
         >
           <Plus className="h-3.5 w-3.5" /> {addLabel}
-        </button>
+        </Button>
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} size="md" backdrop="static">
@@ -485,7 +581,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button appearance="primary" onClick={save}>
+          <Button appearance="primary" color={"violet"} onClick={save}>
             {translate('Save')}
           </Button>
           <Button appearance="default" onClick={() => setOpen(false)}>

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ChevronRight } from 'lucide-react'
+import { Ban, Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslate } from '../../i18n'
 
@@ -10,6 +10,8 @@ import { useTranslate } from '../../i18n'
  *
  * Renders a selection field as a row of clickable stage buttons instead of a
  * dropdown — the same mental model as Odoo's `statusbar` / state buttons.
+ * Completed stages show a check, the current stage is filled with the primary
+ * gradient, and upcoming stages are muted.
  *
  * Config (`field.widgetConfig`):
  *
@@ -22,8 +24,8 @@ import { useTranslate } from '../../i18n'
  * }
  *
  * Options not listed in `stages` (e.g. `cancelled`) are rendered as separate
- * action buttons to the right — red when selected. Clicking a stage updates the
- * field value through the normal form change/save flow.
+ * outline action buttons — red when selected / hovered. Clicking a stage
+ * updates the field value through the normal form change/save flow.
  */
 
 interface StatusOption {
@@ -65,36 +67,48 @@ export const StatusBarWidget: React.FC<any> = ({ value, onChange, field, readonl
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex items-center overflow-hidden rounded-lg border border-border bg-background">
+    <div className="flex flex-wrap items-center gap-2.5">
+      {/* ── Stages track ─────────────────────────────────────────────── */}
+      <div className="inline-flex items-center rounded-xl border border-border bg-muted/40 p-1 shadow-sm">
         {ordered.map((opt, i) => {
-          const done = i <= currentIndex
-          const active = i === currentIndex
           const isCurrent = String(opt.value) === String(value)
+          const done = currentIndex >= 0 && i < currentIndex
           return (
             <React.Fragment key={`${opt.value}`}>
-              {i > 0 && <ChevronRight size={14} className="shrink-0 text-muted-foreground/60" />}
+              {i > 0 && (
+                <ChevronRight
+                  size={13}
+                  strokeWidth={2.5}
+                  className={cn(
+                    'mx-0.5 shrink-0 transition-colors',
+                    done ? 'text-primary' : 'text-muted-foreground/40',
+                  )}
+                />
+              )}
               <button
                 type="button"
                 aria-pressed={isCurrent}
                 disabled={isReadonly}
                 onClick={() => pick(opt.value)}
                 className={cn(
-                  'px-3.5 py-2 text-xs font-semibold transition-colors',
-                  !isReadonly && 'cursor-pointer hover:brightness-105',
-                  done
-                    ? 'bg-gradient-to-r from-primary to-violet-500 text-primary-foreground'
-                    : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
-                  active && 'ring-1 ring-inset ring-primary/40',
+                  'flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all duration-200',
+                  !isReadonly && 'cursor-pointer',
+                  isCurrent
+                    ? 'bg-gradient-to-r from-primary to-violet-500 text-white shadow-md shadow-primary/30'
+                    : done
+                      ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
-                {translate(opt.label)}
+                {done && !isCurrent && <Check size={13} strokeWidth={3} className="shrink-0" />}
+                <span>{translate(opt.label)}</span>
               </button>
             </React.Fragment>
           )
         })}
       </div>
 
+      {/* ── Extra actions (e.g. Cancelled) ──────────────────────────── */}
       {extras.map((opt) => {
         const isCurrent = String(opt.value) === String(value)
         return (
@@ -105,14 +119,15 @@ export const StatusBarWidget: React.FC<any> = ({ value, onChange, field, readonl
             disabled={isReadonly}
             onClick={() => pick(opt.value)}
             className={cn(
-              'rounded-lg border px-3.5 py-2 text-xs font-semibold transition-colors',
+              'flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all duration-200',
               !isReadonly && 'cursor-pointer',
               isCurrent
-                ? 'border-red-500 bg-red-500 text-white'
-                : 'border-border bg-background text-muted-foreground hover:border-red-300 hover:text-red-600',
+                ? 'border-red-500 bg-red-500/10 text-red-600 shadow-sm shadow-red-500/20'
+                : 'border-border bg-background text-muted-foreground hover:border-red-400 hover:bg-red-50 hover:text-red-600',
             )}
           >
-            {translate(opt.label)}
+            <Ban size={13} className="shrink-0" />
+            <span>{translate(opt.label)}</span>
           </button>
         )
       })}

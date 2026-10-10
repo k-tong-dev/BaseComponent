@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import {useRouter, useSearchParams} from 'next/navigation'
 import {Breadcrumb, Dropdown, Loader, Popover, Whisper, Drawer, Tabs, Tab} from 'rsuite'
 import type { StorageFile } from '@/components/Base/Asset/types'
@@ -49,6 +49,7 @@ import { TagSelectWidget } from '@/components/Base/Fields/Widgets/TagSelectWidge
 import { One2ManyListWidget } from '../../Fields/Widgets/One2ManyListWidget'
 import { StatusBarWidget } from '../../Fields/Widgets/StatusBarWidget'
 import { useTranslate } from '../../i18n'
+import { resolveCondition, type FormConditionContext } from './domain'
 import {Switch} from "@/components/ui/switch";
 import { showWizardWarning, showWizardError, Wizard } from '../../Wizard'
 
@@ -68,7 +69,6 @@ export interface FormField {
     label: string
     type: 'number' | 'file' | 'array' | 'json' | 'checkbox' | 'boolean' | 'toggle' | 'date' | 'datetime' | 'time' | 'year' | 'month' | 'day' | 'one2many' | 'many2many' | 'many2one' | 'selection' | 'string' | 'html'
     required?: boolean
-    readonly?: boolean
     helper?: string
     placeholder?: string
     options?: Array<{ label: string; value: string }>
@@ -89,9 +89,36 @@ export interface FormField {
     groupColumn?: number
     widget?: string  // Field widget name (e.g., 'many2many_list', 'many2one', 'one2many')
     widgetConfig?: any  // Widget-specific configuration
-    show?: (data: any) => boolean  // Conditional visibility
+    show?: (data: any) => boolean  // Conditional visibility (function form)
+    /**
+     * Odoo-style visibility: expression string evaluated against current form
+     * values (e.g. "payment_method == 'cash'"), or a function receiving
+     * (data, context). Matches the field `show` function but with a terse syntax.
+     */
+    invisible?: string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style readonly: boolean, expression string (e.g. "status != 'draft'"),
+     * or a function. Evaluated against current form values on every render.
+     */
+    readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style computed field (onchange): the value is recomputed whenever
+     * any form value changes, and the field is forced readonly in the form.
+     * The computed value is still submitted with the record payload.
+     */
+    compute?: (data: any) => any
+    /** Marks the field as computed (readonly + driven by `compute`). */
+    computed?: boolean
+    /**
+     * Default value used when creating a brand-new record (before the user
+     * types anything). A function returning the default is also supported.
+     * Examples: `default: 'draft'` on status, `default: true` on is_sale_order.
+     */
+    default?: any | (() => any)
     // New Fields system options
     fetchUrl?: string
+    /** Which field from the fetched options to display as the label (many2one). */
+    labelKey?: string
     multiple?: boolean
     groupBy?: string
     tree?: boolean
@@ -139,6 +166,34 @@ export interface FormConfig {
         readonly?: boolean
         helper?: string
     }>
+    /**
+     * Odoo-style onchange watchers: when `field` changes, `onChange` is called
+     * with (data, prevData) and its return value is merged into the form data.
+     * Use this to sync dependent fields (e.g. order currency → line currencies).
+     */
+    watchers?: Array<{
+        field: string
+        onChange: (data: any, prevData: any) => Record<string, any>
+    }>
+    /**
+     * Odoo-style state transition buttons (e.g. Draft → Confirmed → Done).
+     * Each button is visible only when the current status matches `from`.
+     * Clicking a button sets the status to `to` and saves the record.
+     */
+    stateActions?: Array<{
+        from: string | string[]
+        to: string
+        label: string
+        icon?: React.ReactNode
+        variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+        confirm?: string
+    }>
+    /**
+     * Odoo-style view context: a key-value dict that views and actions can read.
+     * Can be set from URL params, props, or programmatically. Used for defaults,
+     * visibility rules, and passing data between views.
+     */
+    context?: Record<string, any>
     breadcrumbs: {
         base: string
         list: string
@@ -171,6 +226,7 @@ interface FormViewProps<T extends Entity> {
     onNavigate?: (recordId: string | number) => void  // navigate to a specific record
     onRefresh?: () => void  // trigger parent data refresh
     readonly?: boolean  // make all fields read-only and hide save bar
+    context?: Record<string, any>  // Odoo-style view context
 }
 
 export function FormView<T extends Entity>(props: FormViewProps<T>) {
@@ -181,7 +237,7 @@ export function FormView<T extends Entity>(props: FormViewProps<T>) {
   )
 }
 
-function FormViewContent<T extends Entity>({mode, config, initialData, entityId, serverActions, availableFields = [], onPrint, recordIds, onNavigate, onRefresh, readonly: formReadonly = false}: FormViewProps<T>) {
+function FormViewContent<T extends Entity>({mode, config, initialData, entityId, serverActions, availableFields = [], onPrint, recordIds, onNavigate, onRefresh, readonly: formReadonly = false, context = {}}: FormViewProps<T>) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const translate = useTranslate()
@@ -304,7 +360,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             // Initialize missing fields with defaults
             config.fields.forEach(field => {
                 if (defaultData[field.key] === undefined || defaultData[field.key] === null) {
-                    if (field.type === 'array' || field.type === 'json') {
+                    if (field.default !== undefined && field.default !== null) {
+                        defaultData[field.key] = typeof field.default === 'function' ? (field.default as () => any)() : field.default
+                    } else if (field.type === 'array' || field.type === 'json') {
                         defaultData[field.key] = []
                     } else if (field.type === 'number') {
                         defaultData[field.key] = 0
@@ -383,6 +441,12 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         const dataWithoutFiles = {...data}
         const originalWithoutFiles = {...originalData}
         for (const field of allFields) {
+            // Skip computed fields — they are derived, not user-edited
+            if (field.computed) {
+                delete dataWithoutFiles[field.key]
+                delete originalWithoutFiles[field.key]
+                continue
+            }
             if (field.type === 'file') {
                 delete dataWithoutFiles[field.key]
                 delete originalWithoutFiles[field.key]
@@ -622,12 +686,16 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     }
 
     const renderField = (field: FormField) => {
-        // Check conditional visibility
+        const condCtx: FormConditionContext = { mode, context }
+        // Check conditional visibility (function form + Odoo-style expression form)
         if (field.show && !field.show(data)) {
             return null
         }
+        if (field.invisible && resolveCondition(field.invisible, data, condCtx)) {
+            return null
+        }
 
-        const readonly = formReadonly || field.readonly
+        const readonly = formReadonly || resolveCondition(field.readonly, data, condCtx) || Boolean(field.computed)
         const value = data[field.key]
         const onChange = (newValue: any) => {
             if (readonly) return
@@ -1089,8 +1157,53 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }
 
+    // Odoo-style computed fields: recompute on every value change (onchange).
+    // Computed fields are always readonly in the form; their value is still
+    // submitted with the record payload.
+    useEffect(() => {
+        const computedFields = config.fields.filter((f) => typeof f.compute === 'function')
+        if (computedFields.length === 0) return
+        let changed = false
+        const next = { ...data }
+        for (const field of computedFields) {
+            const computed = field.compute!(data)
+            if (next[field.key] !== computed) {
+                next[field.key] = computed
+                changed = true
+            }
+        }
+        if (changed) setData(next)
+    }, [data, config.fields])
+
+    // Odoo-style watchers: when a watched field changes, run its onChange
+    // and merge the result into the form data (e.g. sync order currency → lines).
+    const prevDataRef = useRef<MutableEntity>({})
+    useEffect(() => {
+        if (!config.watchers || config.watchers.length === 0) return
+        const prev = prevDataRef.current
+        if (!prev || Object.keys(prev).length === 0) {
+            prevDataRef.current = data
+            return
+        }
+        let updates: Record<string, any> = {}
+        for (const watcher of config.watchers) {
+            if (data[watcher.field] !== prev[watcher.field]) {
+                const result = watcher.onChange(data, prev)
+                updates = { ...updates, ...result }
+            }
+        }
+        if (Object.keys(updates).length > 0) {
+            setData(prev => ({ ...prev, ...updates }))
+        }
+        prevDataRef.current = data
+    }, [data, config.watchers])
+
     // Group fields by groupNumber for proper grid layout
     const groupedFields = config.fields.reduce((acc, field) => {
+        // Skip fields hidden by an Odoo-style `invisible` condition
+        if (field.invisible && resolveCondition(field.invisible, data, { mode })) {
+            return acc
+        }
         // Use groupNumber for grouping, default to 0 if not specified
         const groupNumber = field.groupNumber || 0
         if (!acc[groupNumber]) {
@@ -1193,6 +1306,49 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                     />
                 )}
             </div>
+
+            {/* Odoo-style State Transition Buttons */}
+            {config.stateActions && config.stateActions.length > 0 && mode === 'edit' && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {config.stateActions.map((action) => {
+                        const currentStatus = data.status
+                        const isVisible = Array.isArray(action.from)
+                            ? action.from.includes(currentStatus)
+                            : currentStatus === action.from
+                        if (!isVisible) return null
+                        return (
+                            <Button
+                                key={`${action.from}-${action.to}`}
+                                size="sm"
+                                color={"violet"}
+                                appearance={action.variant || 'primary'}
+                                onClick={async () => {
+                                    if (action.confirm) {
+                                        setShowUnsavedWarning(true)
+                                        setPendingUnsavedAction({
+                                            onDiscard: async () => {
+                                                setData(prev => ({ ...prev, status: action.to }))
+                                                setHasChanges(true)
+                                                // Auto-save after state change
+                                                setTimeout(() => handleSubmit(), 100)
+                                            }
+                                        })
+                                        return
+                                    }
+                                    setData(prev => ({ ...prev, status: action.to }))
+                                    setHasChanges(true)
+                                    // Auto-save after state change
+                                    setTimeout(() => handleSubmit(), 100)
+                                }}
+                                disabled={saving}
+                            >
+                                {action.icon}
+                                {translate(action.label)}
+                            </Button>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* Form Content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1456,6 +1612,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         <ActionBarItem
                             color="red"
                             size="sm"
+                            visible={hasChanges}
                             onClick={() => {
                                 if (mode === 'edit' && originalData) {
                                     setData(originalData)
@@ -1485,6 +1642,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         <ActionBarItem
                             appearance="primary"
                             color="green"
+                            visible={hasChanges && isFormValid()}
                             onClick={handleSubmit}
                             disabled={saving || !isFormValid()}
                         >

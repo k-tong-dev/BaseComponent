@@ -542,6 +542,82 @@ export const productFormConfig: FormConfig = {
 - Smooth transition animations
 - Ideal for boolean flags and status fields
 
+## 🇴 Odoo-Style Field Conditions (invisible / readonly / compute / default)
+
+FormView fields support Odoo-style condition expressions evaluated against the
+current form values on every render (see `domain.ts`). The syntax is a tiny
+safe expression language (no `eval`):
+
+- Comparisons: `status != 'draft'`, `payment_method == 'cash'`, `=`, `<>`
+- Membership: `booking_type in ['takeaway', 'delivery']`, `not in [...]`
+- Boolean logic: `&&`, `||`, `!`, parentheses
+- Field identifiers resolve to the **current form values** (`values[field]`).
+
+### invisible
+
+```typescript
+{
+  key: 'coupon_code',
+  label: 'Coupon Code',
+  type: 'string',
+  invisible: "payment_method != 'coupon'",   // expression
+}
+```
+
+A function form is also supported (receives `data` and a `{ mode: 'create' | 'edit' }`
+context), handy for mode-based logic:
+
+```typescript
+{
+  key: 'is_sale_order',
+  label: 'Is Sale Order',
+  type: 'toggle',
+  invisible: (_data, ctx) => ctx?.mode === 'create', // hidden while creating
+}
+```
+
+### readonly
+
+```typescript
+{
+  key: 'customer_id',
+  label: 'Customer',
+  type: 'many2one',
+  fetchUrl: '/api/dashboard/customers',
+  readonly: "status != 'draft'",   // editable only while the order is draft
+}
+```
+
+### default
+
+Applied when a brand-new record is created (before the user types anything):
+
+```typescript
+{ key: 'status', label: 'Status', type: 'selection', default: 'draft', ... }
+{ key: 'is_sale_order', type: 'toggle', default: true, ... }
+```
+
+A function returning the default is also accepted (`default: () => 'draft'`).
+
+### compute / computed
+
+An Odoo-style onchange: the value is recomputed whenever any form value changes
+and the field is forced readonly (still submitted with the payload):
+
+```typescript
+{
+  key: 'total',
+  label: 'Total',
+  type: 'number',
+  computed: true,
+  compute: (data) =>
+    (data.line_ids ?? []).reduce(
+      (sum, l) => sum + Number(l.quantity || 0) * Number(l.price || 0),
+      0,
+    ),
+}
+```
+
 ## 🎯 Custom Quick Actions
 
 FormView supports custom button actions in the Quick Actions sidebar, allowing you to add entity-specific actions beyond the built-in options.
