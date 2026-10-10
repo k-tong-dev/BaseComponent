@@ -518,7 +518,16 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         // `overrideData` lets state-action buttons submit a specific form state
         // (e.g. a new `status`) without relying on the async `setData` closure,
         // which would otherwise send the stale (pre-change) data to the API.
-        const formData = overrideData ?? data
+        // Guard: ignore a React/DOM click-event accidentally passed through
+        // (e.g. `onClick={handleSubmit}`), otherwise `formData` would become the
+        // event object and every required field would look empty.
+        const looksLikeEvent =
+            overrideData != null &&
+            (typeof overrideData === 'function' ||
+                typeof overrideData?.preventDefault === 'function' ||
+                'nativeEvent' in overrideData ||
+                'currentTarget' in overrideData)
+        const formData = !looksLikeEvent && overrideData != null ? overrideData : data
         if (formReadonly) return
 
         // Validate required fields
@@ -1690,7 +1699,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             appearance="primary"
                             color="green"
                             visible={hasChanges && isFormValid()}
-                            onClick={handleSubmit}
+                            onClick={() => handleSubmit()}
                             disabled={saving || !isFormValid()}
                         >
                             <IoMdCloudDone className="w-4 h-4 mr-2"/>
