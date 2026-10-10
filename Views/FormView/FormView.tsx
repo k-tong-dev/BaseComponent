@@ -514,18 +514,22 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }, [data, originalData, uploadedFiles, config.fields])
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (overrideData?: any) => {
+        // `overrideData` lets state-action buttons submit a specific form state
+        // (e.g. a new `status`) without relying on the async `setData` closure,
+        // which would otherwise send the stale (pre-change) data to the API.
+        const formData = overrideData ?? data
         if (formReadonly) return
 
         // Validate required fields
         for (const field of config.fields) {
-            if (field.required && !data[field.key]) {
+            if (field.required && !formData[field.key]) {
                 showToast('error', 'Validation Error', `${translate(field.label)} is required`)
                 return
             }
 
             if (field.validation) {
-                const error = field.validation(data[field.key])
+                const error = field.validation(formData[field.key])
                 if (error) {
                     showToast('error', 'Validation Error', error)
                     return
@@ -536,7 +540,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         setSaving(true)
 
         try {
-            const payload = {...data}
+            const payload = {...formData}
 
             // File fields: Put JSON objects directly in payload
             config.fields
@@ -1364,22 +1368,24 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 appearance={action.variant || 'primary'}
                                 onClick={async () => {
+                                    // Build the next form state explicitly and submit it
+                                    // directly — calling handleSubmit() after setData
+                                    // would send the stale (pre-change) status to the API.
+                                    const nextData = { ...data, status: action.to }
                                     if (action.confirm) {
                                         setShowUnsavedWarning(true)
                                         setPendingUnsavedAction({
                                             onDiscard: async () => {
-                                                setData(prev => ({ ...prev, status: action.to }))
+                                                setData(nextData)
                                                 setHasChanges(true)
-                                                // Auto-save after state change
-                                                setTimeout(() => handleSubmit(), 100)
+                                                await handleSubmit(nextData)
                                             }
                                         })
                                         return
                                     }
-                                    setData(prev => ({ ...prev, status: action.to }))
+                                    setData(nextData)
                                     setHasChanges(true)
-                                    // Auto-save after state change
-                                    setTimeout(() => handleSubmit(), 100)
+                                    await handleSubmit(nextData)
                                 }}
                                 disabled={saving}
                             >

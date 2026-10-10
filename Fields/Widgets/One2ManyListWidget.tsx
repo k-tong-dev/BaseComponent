@@ -84,6 +84,8 @@ export interface One2ManyListTargetField {
   options?: Array<{ label: any; value: any }>
   fetchUrl?: string
   labelKey?: string
+  /** Source field used to build the many2one option label (e.g. `code`). */
+  displayField?: string
   columnWidth?: number
   order?: number
 }
@@ -119,6 +121,8 @@ interface ModalField {
   options?: Array<{ label: any; value: any }>
   fetchUrl?: string
   labelKey?: string
+  /** Source field used to build the many2one option label (e.g. `code`). */
+  displayField?: string
   columnWidth?: number
   order?: number
 }
@@ -213,6 +217,7 @@ function columnsToFields(columns: One2ManyListColumn[]): ModalField[] {
     options: c.options,
     fetchUrl: c.relation || c.fetchUrl,
     labelKey: c.labelKey,
+    displayField: c.displayField,
     columnWidth: c.width && c.width >= 200 ? 2 : 1,
     order: i,
   }))
@@ -236,6 +241,7 @@ function fieldsToColumns(fields: ModalField[]): One2ManyListColumn[] {
     options: f.options,
     relation: f.fetchUrl,
     labelKey: f.labelKey,
+    displayField: f.displayField,
     width: f.columnWidth === 2 ? 220 : 140,
   }))
 }
@@ -265,6 +271,7 @@ function FieldControl({
     helper: f.helper,
     size: 'md',
     fetchUrl: f.fetchUrl,
+    displayField: f.displayField,
     options: toFieldOptions(f.options),
   }
 
@@ -318,6 +325,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
           options: f.options,
           fetchUrl: f.fetchUrl,
           labelKey: f.labelKey,
+          displayField: f.displayField,
           columnWidth: f.columnWidth,
           order: f.order,
         }))
@@ -350,7 +358,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
     const map: Record<string, { url: string; displayField: string; valueField: string }> = {}
     for (const f of fields) {
       if (f.type === 'many2one' && f.fetchUrl) {
-        map[f.key] = { url: f.fetchUrl, displayField: 'name', valueField: 'id' }
+        map[f.key] = { url: f.fetchUrl, displayField: f.displayField || 'name', valueField: 'id' }
       }
     }
     for (const c of listColumns) {
