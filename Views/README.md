@@ -316,6 +316,11 @@ const config = {
 - Currently embedded within ListView
 - Configured through listViewConfig with gantt settings
 
+### Stat View
+- Summary KPI cards (counts, totals) rendered **above** a data view
+- Configured through `statViewConfig`; auto-hidden for form/custom views and when empty
+- See [StatView README](StatView/README.md)
+
 ## API Reference
 
 ### ResourceViewConfig
@@ -326,6 +331,7 @@ interface ResourceViewConfig {
   listViewConfig?: ListViewConfig
   kanbanViewConfig?: KanbanViewConfig
   formViewConfig?: FormConfig
+  statViewConfig?: StatViewConfig  // Summary KPI cards shown above the view
   ganttConfig?: {
     startDateKey: string
     endDateKey: string

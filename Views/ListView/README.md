@@ -141,6 +141,89 @@ export interface ListColumn {
 }
 ```
 
+## Cell Renderer — the `render` function
+
+`render` is the ListView's main extension point: it turns a plain table cell into **arbitrary JSX**. This is how you show an avatar instead of a raw `customer_id`, a coloured status pill instead of `"paid"`, a formatted date, or even a **button** — all without touching ListView itself.
+
+### The mechanism (render-prop)
+
+ListView maps over `columns` and renders one rsuite `<Cell>` each (`components/Base/Views/ListView/index.tsx:867`). rsuite's `<Cell>` takes a **render-prop** (children as a function) that it calls once per row with that row's data:
+
+```tsx
+<Cell dataKey={column.key}>
+  {(rowData: any) => {
+    if (rowData._isGroup) { /* group-row short-circuit: returns early, your render is NOT called */ }
+    const value = rowData[column.key]                     // raw value for THIS column's key
+    if (column.type === 'boolean') return <Switch … />    // built-in special case
+    return (
+      <div className="truncate">
+        {column.render ? column.render(value, rowData) : value}   // ← your function, or the raw value
+      </div>
+    )
+  }}
+</Cell>
+```
+
+That last line is the whole contract: **"if the column supplied `render`, hand it the value + row and show what it returns; otherwise show the raw value."**
+
+### The two arguments — the key to cross-field rendering
+
+`render?(value, rowData)` receives two very different things:
+
+- `value` = `rowData[column.key]` → the raw value of *this* column (e.g. the `customer_id`).
+- `rowData` = the **entire row object** → every other field on the record.
+
+Because you get the whole row, a column keyed on a foreign id can render a *related* record. This is exactly what `app/dashboard/orders/config/listView.tsx` does — the column is `customer_id`, but the cell renders `row.customer` (name + avatar):
+
+```tsx
+function customerCell(_value: any, row: any) {
+  const name = row?.customer?.name ?? ''
+  const src  = row?.customer?.avatar ?? row?.customer?.image_id?.url
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <Avatar className="h-7 w-7 shrink-0">
+        <AvatarImage src={src} alt={name} />
+        <AvatarFallback>{(name || '?').slice(0, 1).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <span className="truncate">{name || '—'}</span>
+    </div>
+  )
+}
+// column: { key: 'customer_id', title: 'Customer', render: customerCell }
+```
+
+So `render` **decouples "which field identifies/sorts the column"** (`key`) from **"which data the cell needs to display"** (`rowData.*`).
+
+### What it can return — a progression
+
+It returns a `ReactNode`, so a cell can escalate as far as you need:
+
+1. **Formatted text** — `render: (v) => v ? new Date(v).toLocaleString() : ''`
+2. **Styled markup** — status pills: `render: (v) => <span className="rounded-full border px-2 py-0.5 text-xs">{v}</span>`
+3. **Composed components** — `customerCell` above (`<Avatar>` + name)
+4. **Interactive controls** — a per-row **Close** button built the same way in `app/dashboard/pos/sessions/page.tsx`:
+   ```tsx
+   { key: '_actions', title: 'Action', width: 110,
+     render: (_v, row) => row?.status === 'open'
+       ? <button onClick={(e) => { e.stopPropagation(); closeSession(row) }}>Close</button>
+       : <span className="text-muted-foreground">Closed</span> }
+   ```
+   > Note the `e.stopPropagation()` on row actions so clicking the button doesn't also fire the row's click/`onEdit`.
+
+### Gotchas
+
+- **Every cell is wrapped in `div.truncate`** (overflow ellipsis). If your cell has multiple parts, manage its own overflow (`min-w-0` on the flex row + `truncate` on the text) so nothing gets clipped — see `customerCell`.
+- **`render` is display-only.** Sorting, filtering, grouping, `summary`, and width all still run off `column.key` and the other flags. The "Customer" column above sorts by `customer_id` while *rendering* `customer.name`.
+- **Group rows bypass it.** When the table is grouped (`enableGroupBy`), grouped rows set `rowData._isGroup` and return early — your `render` is only called for normal data rows. Handle `rowData` being a group row if you rely on `row`.
+- **A `key` that isn't in the data is fine.** Use a synthetic key like `_actions` for pure-action columns; the `value` passed in will just be `undefined`.
+
+### Responsibility split
+
+ListView never joins or reshapes data — it renders whatever is on each row. `customerCell` expects `row.customer` to already exist because **the orders API attaches it**. Keep that split:
+
+- **API / query layer** → shape/enrich rows (join relations, resolve avatars).
+- **`render` fn** → only *present* the row, defensively (`row?.customer?.name ?? ''`) so a missing relation degrades gracefully.
+
 ## Creating a List Configuration
 
 ### Example Configuration

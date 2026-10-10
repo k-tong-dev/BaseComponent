@@ -27,6 +27,9 @@ components/admin/
 │   ├── config/
 │   ├── utils/
 │   └── README.md
+├── StatView/           # Summary KPI cards rendered above a view
+│   ├── index.tsx
+│   └── README.md
 ├── ResourceView/       # Parent component managing all views
 │   ├── index.tsx
 │   ├── types.ts
@@ -92,6 +95,16 @@ Note: Model-specific configurations are now in app/admin/[model]/config/
 
 - **Usage**: Main component for admin pages
 - **Config**: `ResourceViewConfig`
+
+### StatView
+- **Purpose**: Show summary KPI cards (counts, totals) above a data view
+- **Features**:
+  - Config-driven stat cards in a responsive grid (2 cols on phones, up to 6 from `sm`)
+  - Per-stat label, value, optional icon / accent color / help text
+  - Rendered by ResourceView via `statViewConfig`; auto-hides when empty and for form/custom views
+
+- **Usage**: Page-level "at a glance" numbers (see also the header `summary` columns for in-table totals)
+- **Config**: `StatViewConfig` — full details in [StatView README](StatView/README.md)
 
 ## Usage Pattern
 

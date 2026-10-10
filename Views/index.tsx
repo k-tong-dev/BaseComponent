@@ -6,6 +6,7 @@ import {ListView} from './ListView'
 import {KanbanView} from './KanbanView'
 import {GanttView} from './GanttView'
 import {FormView} from './FormView'
+import {StatView} from './StatView'
 import {PrintView} from '../Print/PrintView'
 import {Button} from '@/components/ui/button'
 import {Card} from '@/components/ui/card'
@@ -356,6 +357,11 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
                     </div>
                 )}
                 <div className="p-6 pt-0">
+                    {config.statViewConfig && viewType !== 'form' && viewType !== 'custom' && (
+                        <div className="mb-4">
+                            <StatView config={config.statViewConfig} />
+                        </div>
+                    )}
                     {renderHeader()}
                     {renderView()}
                 </div>
