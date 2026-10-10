@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { TagPicker, Avatar } from 'rsuite'
 import { cn } from '@/lib/utils'
+import { FieldLabel } from '../Label'
 import type { FieldProps } from '../types'
 
 const PICKER_STYLE = {
@@ -14,8 +15,6 @@ const PICKER_STYLE = {
   outlineColor: 'transparent',
   boxShadow: 'none',
 }
-
-const SIZE = { sm: 'top-3 text-xs', md: 'top-4 text-sm', lg: 'top-5 text-base' }
 
 export function Many2ManyField({ config, value, onChange, error }: FieldProps) {
   const [open, setOpen] = React.useState(false)
@@ -29,9 +28,6 @@ export function Many2ManyField({ config, value, onChange, error }: FieldProps) {
       return v.id || v.value_id || v.key
     }).filter(Boolean)
   }, [value])
-
-  const hasValue = selectedIds.length > 0
-  const floating = open || hasValue
 
   // Seed initial options from value objects (API returns full relation data)
   React.useEffect(() => {
@@ -86,6 +82,7 @@ export function Many2ManyField({ config, value, onChange, error }: FieldProps) {
 
   return (
     <div className="w-full space-y-1">
+      <FieldLabel label={config.label} required={config.required} error={!!error} />
       <div className="relative">
         <style>{`.rs-picker-toggle { border-top: 0 !important; border-right: 0 !important; border-left: 0 !important; border-bottom: 0 !important; border-radius: 0 !important; outline: none !important; box-shadow: none !important; } .rs-picker-tag-wrapper { min-height: unset !important; padding-top: 0 !important; padding-bottom: 2px !important; } .rs-picker-textbox { margin-top: 0 !important; } .rs-picker-toggle-wrapper { display: block !important; } .rs-picker-menu { max-height: 240px !important; }`}</style>
         <div className={cn(
@@ -121,16 +118,6 @@ export function Many2ManyField({ config, value, onChange, error }: FieldProps) {
             placement={"auto"}
           />
         </div>
-        {config.label && (
-          <label className={cn(
-            'absolute left-0 z-10 origin-[0] text-muted-foreground duration-200 pointer-events-none',
-            floating ? '-translate-y-3 scale-75' : 'translate-y-0 scale-100',
-            error ? 'text-destructive' : floating ? 'text-primary' : 'text-muted-foreground',
-            SIZE[config.size || 'md'],
-          )}>
-            {config.label}
-          </label>
-        )}
         <div className={cn(
           'absolute bottom-0 left-1/2 h-px w-full -translate-x-1/2 scale-x-0 bg-foreground transition-transform duration-200',
           open && 'scale-x-100',

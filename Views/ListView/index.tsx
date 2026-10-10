@@ -24,24 +24,7 @@ import {
     Modal
 } from 'rsuite'
 import {ServerActions, ServerActionConfig, ActionContext, ConfirmationModal} from '../../Actions'
-import {
-    Search,
-    Filter,
-    X,
-    Download,
-    Grid3x3,
-    List,
-    ChevronLeft,
-    ChevronRight,
-    CheckSquare,
-    Square,
-    SortAsc,
-    SortDesc,
-    Settings,
-    FileSpreadsheet,
-    Trash2
-} from 'lucide-react'
-import {cn} from '@/lib/utils'
+
 import {CiMenuKebab} from "react-icons/ci";
 import {Badge} from "@/components/ui/badge";
 

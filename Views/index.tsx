@@ -1,14 +1,17 @@
 'use client'
 
 import React, {useState, useEffect, useRef, useMemo} from 'react'
+import {useSearchParams} from 'next/navigation'
 import {ListView} from './ListView'
 import {KanbanView} from './KanbanView'
 import {GanttView} from './GanttView'
 import {FormView} from './FormView'
+import {StatView} from './StatView'
 import {PrintView} from '../Print/PrintView'
 import {Button} from '@/components/ui/button'
 import {Card} from '@/components/ui/card'
 import {Loader} from 'rsuite'
+import {ViewContextProvider, parseContextFromSearchParams} from './Context'
 
 import { List, Grid3x3, Calendar, Info } from 'lucide-react'
 import {ResourceViewProps, ResourceType} from './types'
@@ -20,6 +23,7 @@ import { useViewToolbar } from '@/components/Base/ViewToolbar/hooks/useViewToolb
 import { ViewToolbar } from '../ViewToolbar'
 
 export function ResourceView({config, onEdit, onCreate, onDelete, loading, entityId, initialData, recordIds, onNavigate, onRefresh, allowCreate, allowEdit}: ResourceViewProps) {
+    const searchParams = useSearchParams()
     const [viewType, setViewType] = useState<ResourceType>(config.type)
     const [editingId, setEditingId] = useState<string | undefined>(undefined)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -35,6 +39,12 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
       pathname: typeof window !== 'undefined' ? window.location.pathname : '',
     })
     const { searchValues, filterValues, groupByField, setSearchValues, setFilterValues, setGroupByField, showFilterPanel, setShowFilterPanel } = toolbar
+
+    // Odoo-style view context: merge config context with URL params (?context[key]=value)
+    const viewContext = useMemo(() => {
+      const urlContext = parseContextFromSearchParams(searchParams)
+      return { ...(config.formViewConfig?.context || {}), ...urlContext }
+    }, [searchParams, config.formViewConfig?.context])
 
     // Set editingId after mount to avoid hydration mismatch
     useEffect(() => {
@@ -188,6 +198,7 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
                             onNavigate={onNavigate}
                             onRefresh={onRefresh}
                             readonly={allowEdit === false}
+                            context={viewContext}
                         />
                     </div>
                 )
@@ -326,39 +337,46 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
     }
 
     return (
-        <Card className="border-border/50 rounded-none min-h-screen shadow-none pt-4">
-            {config.title && viewType !== 'form' && (
-                <div className="px-6 pt-1 flex items-center gap-2">
-                    <h1 className="text-2xl font-bold">{config.title}</h1>
-                    {config.description && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-help">
-                                    <Info size={16}/>
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="max-w-xs">
-                                {config.description}
-                            </TooltipContent>
-                        </Tooltip>
+        <ViewContextProvider value={viewContext}>
+            <Card className="border-border/50 rounded-none min-h-screen shadow-none pt-4">
+                {config.title && viewType !== 'form' && (
+                    <div className="px-6 pt-1 flex items-center gap-2">
+                        <h1 className="text-2xl font-bold">{config.title}</h1>
+                        {config.description && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-help">
+                                        <Info size={16}/>
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                    {config.description}
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+                    </div>
+                )}
+                <div className="p-6 pt-0">
+                    {config.statViewConfig && viewType !== 'form' && viewType !== 'custom' && (
+                        <div className="mb-4">
+                            <StatView config={config.statViewConfig} />
+                        </div>
                     )}
+                    {renderHeader()}
+                    {renderView()}
                 </div>
-            )}
-            <div className="p-6 pt-0">
-                {renderHeader()}
-                {renderView()}
-            </div>
-            {showPrintModal && printConfig && (
-                <PrintView
-                    open={showPrintModal}
-                    data={printConfig.data}
-                    mode={printConfig.mode}
-                    title={printConfig.title}
-                    template={printConfig.template}
-                    onClose={handlePrintClose}
-                />
-            )}
-        </Card>
+                {showPrintModal && printConfig && (
+                    <PrintView
+                        open={showPrintModal}
+                        data={printConfig.data}
+                        mode={printConfig.mode}
+                        title={printConfig.title}
+                        template={printConfig.template}
+                        onClose={handlePrintClose}
+                    />
+                )}
+            </Card>
+        </ViewContextProvider>
     )
 }
 

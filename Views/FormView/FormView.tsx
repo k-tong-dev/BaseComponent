@@ -1,9 +1,10 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import {useRouter, useSearchParams} from 'next/navigation'
 import {Breadcrumb, Dropdown, Loader, Popover, Whisper, Drawer, Tabs, Tab} from 'rsuite'
 import type { StorageFile } from '@/components/Base/Asset/types'
+import { deleteStorageFile } from '@/components/Base/Asset/storage-client'
 import type { UploadedFile } from '@/components/Base/Fields/File'
 import {
     ActionBar,
@@ -47,6 +48,9 @@ import { One2ManyWidget } from '../../Fields/Widgets/One2ManyWidget'
 import { Many2OneWidget } from '../../Fields/Widgets/Many2OneWidget'
 import { TagSelectWidget } from '@/components/Base/Fields/Widgets/TagSelectWidget'
 import { One2ManyListWidget } from '../../Fields/Widgets/One2ManyListWidget'
+import { StatusBarWidget } from '../../Fields/Widgets/StatusBarWidget'
+import { useTranslate } from '../../i18n'
+import { resolveCondition, type FormConditionContext } from './domain'
 import {Switch} from "@/components/ui/switch";
 import { showWizardWarning, showWizardError, Wizard } from '../../Wizard'
 
@@ -56,6 +60,7 @@ registerWidget(One2ManyWidget as any)
 registerWidget(Many2OneWidget as any)
 registerWidget(TagSelectWidget as any)
 registerWidget(One2ManyListWidget as any)
+registerWidget(StatusBarWidget as any)
 
 
 
@@ -65,7 +70,6 @@ export interface FormField {
     label: string
     type: 'number' | 'file' | 'array' | 'json' | 'checkbox' | 'boolean' | 'toggle' | 'date' | 'datetime' | 'time' | 'year' | 'month' | 'day' | 'one2many' | 'many2many' | 'many2one' | 'selection' | 'string' | 'html'
     required?: boolean
-    readonly?: boolean
     helper?: string
     placeholder?: string
     options?: Array<{ label: string; value: string }>
@@ -79,6 +83,7 @@ export interface FormField {
     component?: React.ComponentType<any>  // Custom component
     uploadText?: string
     maxFiles?: number  // Max files allowed (1 = single-file mode, replacing old on upload)
+    uploadPath?: string  // Bucket folder device uploads are stored under (e.g. 'menu-items')
     order?: number
     after?: string
     before?: string
@@ -86,9 +91,38 @@ export interface FormField {
     groupColumn?: number
     widget?: string  // Field widget name (e.g., 'many2many_list', 'many2one', 'one2many')
     widgetConfig?: any  // Widget-specific configuration
-    show?: (data: any) => boolean  // Conditional visibility
+    show?: (data: any) => boolean  // Conditional visibility (function form)
+    /**
+     * Odoo-style visibility: expression string evaluated against current form
+     * values (e.g. "payment_method == 'cash'"), or a function receiving
+     * (data, context). Matches the field `show` function but with a terse syntax.
+     */
+    invisible?: string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style readonly: boolean, expression string (e.g. "status != 'draft'"),
+     * or a function. Evaluated against current form values on every render.
+     */
+    readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style computed field (onchange): the value is recomputed whenever
+     * any form value changes, and the field is forced readonly in the form.
+     * The computed value is still submitted with the record payload.
+     */
+    compute?: (data: any) => any
+    /** Marks the field as computed (readonly + driven by `compute`). */
+    computed?: boolean
+    /**
+     * Default value used when creating a brand-new record (before the user
+     * types anything). A function returning the default is also supported.
+     * Examples: `default: 'draft'` on status, `default: true` on is_sale_order.
+     */
+    default?: any | (() => any)
     // New Fields system options
     fetchUrl?: string
+    /** Which field from the fetched options to display as the label (many2one). */
+    labelKey?: string
+    /** Alternative label key used by columns/other field consumers (many2one). */
+    displayField?: string
     multiple?: boolean
     groupBy?: string
     tree?: boolean
@@ -136,6 +170,34 @@ export interface FormConfig {
         readonly?: boolean
         helper?: string
     }>
+    /**
+     * Odoo-style onchange watchers: when `field` changes, `onChange` is called
+     * with (data, prevData) and its return value is merged into the form data.
+     * Use this to sync dependent fields (e.g. order currency → line currencies).
+     */
+    watchers?: Array<{
+        field: string
+        onChange: (data: any, prevData: any) => Record<string, any>
+    }>
+    /**
+     * Odoo-style state transition buttons (e.g. Draft → Confirmed → Done).
+     * Each button is visible only when the current status matches `from`.
+     * Clicking a button sets the status to `to` and saves the record.
+     */
+    stateActions?: Array<{
+        from: string | string[]
+        to: string
+        label: string
+        icon?: React.ReactNode
+        variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+        confirm?: string
+    }>
+    /**
+     * Odoo-style view context: a key-value dict that views and actions can read.
+     * Can be set from URL params, props, or programmatically. Used for defaults,
+     * visibility rules, and passing data between views.
+     */
+    context?: Record<string, any>
     breadcrumbs: {
         base: string
         list: string
@@ -168,6 +230,7 @@ interface FormViewProps<T extends Entity> {
     onNavigate?: (recordId: string | number) => void  // navigate to a specific record
     onRefresh?: () => void  // trigger parent data refresh
     readonly?: boolean  // make all fields read-only and hide save bar
+    context?: Record<string, any>  // Odoo-style view context
 }
 
 export function FormView<T extends Entity>(props: FormViewProps<T>) {
@@ -178,9 +241,10 @@ export function FormView<T extends Entity>(props: FormViewProps<T>) {
   )
 }
 
-function FormViewContent<T extends Entity>({mode, config, initialData, entityId, serverActions, availableFields = [], onPrint, recordIds, onNavigate, onRefresh, readonly: formReadonly = false}: FormViewProps<T>) {
+function FormViewContent<T extends Entity>({mode, config, initialData, entityId, serverActions, availableFields = [], onPrint, recordIds, onNavigate, onRefresh, readonly: formReadonly = false, context = {}}: FormViewProps<T>) {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const translate = useTranslate()
 
     const [data, setData] = useState<MutableEntity>({} as MutableEntity)
     const [originalData, setOriginalData] = useState<MutableEntity | null>(null)
@@ -188,6 +252,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+    // Files removed or replaced during this session — deleted from the bucket
+    // only after the record is successfully saved (so cancelling is safe).
+    const removedFilesRef = useRef<UploadedFile[]>([])
     const [showQuickActions, setShowQuickActions] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activePageTab, setActivePageTab] = useState('')
@@ -300,7 +367,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             // Initialize missing fields with defaults
             config.fields.forEach(field => {
                 if (defaultData[field.key] === undefined || defaultData[field.key] === null) {
-                    if (field.type === 'array' || field.type === 'json') {
+                    if (field.default !== undefined && field.default !== null) {
+                        defaultData[field.key] = typeof field.default === 'function' ? (field.default as () => any)() : field.default
+                    } else if (field.type === 'array' || field.type === 'json') {
                         defaultData[field.key] = []
                     } else if (field.type === 'number') {
                         defaultData[field.key] = 0
@@ -379,6 +448,12 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         const dataWithoutFiles = {...data}
         const originalWithoutFiles = {...originalData}
         for (const field of allFields) {
+            // Skip computed fields — they are derived, not user-edited
+            if (field.computed) {
+                delete dataWithoutFiles[field.key]
+                delete originalWithoutFiles[field.key]
+                continue
+            }
             if (field.type === 'file') {
                 delete dataWithoutFiles[field.key]
                 delete originalWithoutFiles[field.key]
@@ -439,18 +514,22 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }, [data, originalData, uploadedFiles, config.fields])
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (overrideData?: any) => {
+        // `overrideData` lets state-action buttons submit a specific form state
+        // (e.g. a new `status`) without relying on the async `setData` closure,
+        // which would otherwise send the stale (pre-change) data to the API.
+        const formData = overrideData ?? data
         if (formReadonly) return
 
         // Validate required fields
         for (const field of config.fields) {
-            if (field.required && !data[field.key]) {
-                showToast('error', 'Validation Error', `${field.label} is required`)
+            if (field.required && !formData[field.key]) {
+                showToast('error', 'Validation Error', `${translate(field.label)} is required`)
                 return
             }
 
             if (field.validation) {
-                const error = field.validation(data[field.key])
+                const error = field.validation(formData[field.key])
                 if (error) {
                     showToast('error', 'Validation Error', error)
                     return
@@ -461,7 +540,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         setSaving(true)
 
         try {
-            const payload = {...data}
+            const payload = {...formData}
 
             // File fields: Put JSON objects directly in payload
             config.fields
@@ -503,6 +582,20 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             }
 
             if (result.success) {
+                // Delete files that were removed/replaced during this session.
+                const removed = removedFilesRef.current
+                removedFilesRef.current = []
+                if (removed.length > 0) {
+                    void Promise.all(
+                        removed.map((f) => {
+                            const path = f.path || f.id
+                            return path && !/^(https?:|data:|blob:)/i.test(path)
+                                ? deleteStorageFile(f)
+                                : Promise.resolve()
+                        })
+                    )
+                }
+
                 if (mode === 'create') {
                     showToast('success', `${config.entityName} Created`, `${config.entityName} has been successfully created`)
                     const newId = result.data?.id
@@ -583,6 +676,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     }
 
     const removeFile = (index: number) => {
+        const removed = uploadedFiles[index]
+        if (removed && (removed.path || removed.id)) {
+            removedFilesRef.current.push(removed)
+        }
         const newUploadedFiles = uploadedFiles.filter((_, i) => i !== index)
         setUploadedFiles(newUploadedFiles)
         if (newUploadedFiles.length === 0) {
@@ -618,12 +715,16 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
     }
 
     const renderField = (field: FormField) => {
-        // Check conditional visibility
+        const condCtx: FormConditionContext = { mode, context }
+        // Check conditional visibility (function form + Odoo-style expression form)
         if (field.show && !field.show(data)) {
             return null
         }
+        if (field.invisible && resolveCondition(field.invisible, data, condCtx)) {
+            return null
+        }
 
-        const readonly = formReadonly || field.readonly
+        const readonly = formReadonly || resolveCondition(field.readonly, data, condCtx) || Boolean(field.computed)
         const value = data[field.key]
         const onChange = (newValue: any) => {
             if (readonly) return
@@ -633,7 +734,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         // Check for validation error
         let errorMessage = null
         if (field.required && (!value || value === '')) {
-            errorMessage = `${field.label} is required`
+            errorMessage = `${translate(field.label)} is required`
         } else if (field.validation && value !== undefined && value !== null && value !== '') {
             errorMessage = field.validation(value)
         }
@@ -650,6 +751,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 one2many_list: ['one2many', 'json', 'array'],
                 many2one: ['many2one', 'json', 'string'],
                 tag_select: ['selection', 'string'],
+                statusbar: ['selection', 'string'],
             }
             const valid = compatibleTypes[field.widget]
             if (typeof window !== 'undefined' && valid && !valid.includes(field.type)) {
@@ -731,12 +833,18 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         files={uploadedFiles}
                         maxFiles={field.maxFiles}
                         uploadText={field.uploadText}
-                        label={field.label}
+                        accept={field.accept}
+                        uploadPath={field.uploadPath}
+                        label={translate(field.label)}
                         readonly={readonly}
                         error={errorMessage}
                         onRemove={removeFile}
                         onAssetSelected={(asset) => {
                             if (field.maxFiles === 1) {
+                                const previous = uploadedFiles.filter((f) => f.url)[0]
+                                if (previous && (previous.path || previous.id) && (previous.path || previous.id) !== (asset.path || asset.id)) {
+                                    removedFilesRef.current.push(previous)
+                                }
                                 setUploadedFiles([{ ...asset, file: undefined }])
                             } else {
                                 setUploadedFiles(prev => [...prev, { ...asset, file: undefined }])
@@ -749,7 +857,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 return (
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">{field.label}</label>
+                            <label className="text-sm font-medium">{translate(field.label)}</label>
                             {!readonly && (
                                 <Button onClick={() => addArrayItem(field.key)} size="sm" className="gap-2">
                                     <Plus className="w-4 h-4"/>
@@ -797,7 +905,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <label htmlFor={field.key} className="text-sm font-medium">
-                            {field.label}
+                            {translate(field.label)}
                         </label>
                     </div>
                 )
@@ -995,6 +1103,8 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 readonly: readonly,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
+                                labelKey: field.labelKey,
+                                displayField: field.displayField,
                                 options: field.options?.map((o) => ({ id: o.value, name: o.label })),
                                 size: field.size,
                             }}
@@ -1084,8 +1194,61 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }
 
+    // Odoo-style computed fields: recompute on every value change (onchange).
+    // Computed fields are always readonly in the form; their value is still
+    // submitted with the record payload.
+    //
+    // IMPORTANT: use a FUNCTIONAL update so the compute never clobbers a
+    // concurrent setData from the init/onChange effects. Without this, the
+    // initial mount with `data === {}` could compute totals from stale empty
+    // data and overwrite the initialized record with `{ total: 0 }` only.
+    useEffect(() => {
+        const computedFields = config.fields.filter((f) => typeof f.compute === 'function')
+        if (computedFields.length === 0) return
+        setData((prev) => {
+            if (!prev || Object.keys(prev).length === 0) return prev // not initialized yet
+            let changed = false
+            const next = { ...prev }
+            for (const field of computedFields) {
+                const computed = field.compute!(next)
+                if (next[field.key] !== computed) {
+                    next[field.key] = computed
+                    changed = true
+                }
+            }
+            return changed ? next : prev
+        })
+    }, [data, config.fields])
+
+    // Odoo-style watchers: when a watched field changes, run its onChange
+    // and merge the result into the form data (e.g. sync order currency → lines).
+    const prevDataRef = useRef<MutableEntity>({})
+    useEffect(() => {
+        if (!config.watchers || config.watchers.length === 0) return
+        const prev = prevDataRef.current
+        if (!prev || Object.keys(prev).length === 0) {
+            prevDataRef.current = data
+            return
+        }
+        let updates: Record<string, any> = {}
+        for (const watcher of config.watchers) {
+            if (data[watcher.field] !== prev[watcher.field]) {
+                const result = watcher.onChange(data, prev)
+                updates = { ...updates, ...result }
+            }
+        }
+        if (Object.keys(updates).length > 0) {
+            setData(prev => ({ ...prev, ...updates }))
+        }
+        prevDataRef.current = data
+    }, [data, config.watchers])
+
     // Group fields by groupNumber for proper grid layout
     const groupedFields = config.fields.reduce((acc, field) => {
+        // Skip fields hidden by an Odoo-style `invisible` condition
+        if (field.invisible && resolveCondition(field.invisible, data, { mode })) {
+            return acc
+        }
         // Use groupNumber for grouping, default to 0 if not specified
         const groupNumber = field.groupNumber || 0
         if (!acc[groupNumber]) {
@@ -1189,6 +1352,51 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 )}
             </div>
 
+            {/* Odoo-style State Transition Buttons */}
+            {config.stateActions && config.stateActions.length > 0 && mode === 'edit' && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {config.stateActions.map((action) => {
+                        const currentStatus = data.status
+                        const isVisible = Array.isArray(action.from)
+                            ? action.from.includes(currentStatus)
+                            : currentStatus === action.from
+                        if (!isVisible) return null
+                        return (
+                            <Button
+                                key={`${action.from}-${action.to}`}
+                                size="sm"
+                                color={"violet"}
+                                appearance={action.variant || 'primary'}
+                                onClick={async () => {
+                                    // Build the next form state explicitly and submit it
+                                    // directly — calling handleSubmit() after setData
+                                    // would send the stale (pre-change) status to the API.
+                                    const nextData = { ...data, status: action.to }
+                                    if (action.confirm) {
+                                        setShowUnsavedWarning(true)
+                                        setPendingUnsavedAction({
+                                            onDiscard: async () => {
+                                                setData(nextData)
+                                                setHasChanges(true)
+                                                await handleSubmit(nextData)
+                                            }
+                                        })
+                                        return
+                                    }
+                                    setData(nextData)
+                                    setHasChanges(true)
+                                    await handleSubmit(nextData)
+                                }}
+                                disabled={saving}
+                            >
+                                {action.icon}
+                                {translate(action.label)}
+                            </Button>
+                        )
+                    })}
+                </div>
+            )}
+
             {/* Form Content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Form */}
@@ -1222,7 +1430,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                                 "font-medium " +
                                                 "flex items-center gap-1 mb-2"
                                             }>
-                                                {field.label}
+                                                {translate(field.label)}
                                                 {field.required && <span className="text-red-500 ml-1">*</span>}
                                                 {field.helper && (
                                                     <Whisper
@@ -1281,7 +1489,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                                                 "font-medium " +
                                                                 "flex items-center gap-1 mb-2"
                                                             }>
-                                                                {field.label}
+                                                                {translate(field.label)}
                                                                 {field.required && <span className="text-red-500 ml-1">*</span>}
                                                                 {field.helper && (
                                                                     <Whisper
@@ -1320,7 +1528,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 {config.fields.filter(f => f.type === 'file').map((field) => (
                                     <div key={field.key}>
                                         <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                                            {field.label}
+                                            {translate(field.label)}
                                             {field.required && <span className="text-red-500 ml-1">*</span>}
                                             {field.helper && (
                                                 <Whisper
@@ -1451,6 +1659,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         <ActionBarItem
                             color="red"
                             size="sm"
+                            visible={hasChanges}
                             onClick={() => {
                                 if (mode === 'edit' && originalData) {
                                     setData(originalData)
@@ -1480,6 +1689,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         <ActionBarItem
                             appearance="primary"
                             color="green"
+                            visible={hasChanges && isFormValid()}
                             onClick={handleSubmit}
                             disabled={saving || !isFormValid()}
                         >

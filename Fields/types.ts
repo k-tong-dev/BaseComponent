@@ -28,6 +28,11 @@ export interface FieldConfig {
   default?: any
   size?: 'sm' | 'md' | 'lg'
   className?: string
+  /** If set, use this key from fetched item as display name (e.g., 'code' for currency) */
+  labelKey?: string
+  /** Alternative name used in some configs */
+  displayField?: string
+  labelField?: string
 }
 
 export interface FieldProps {

@@ -5,6 +5,7 @@ import { KanbanViewConfig } from './KanbanView'
 import { GanttViewConfig } from './GanttView'
 import { FormConfig } from './FormView'
 import { ServerActionConfig } from '../Actions'
+import { StatViewConfig } from './StatView'
 
 export type ResourceType = 'list' | 'kanban' | 'gantt' | 'form' | 'custom'
 
@@ -24,6 +25,7 @@ export interface ResourceViewConfig {
   ganttViewConfig?: GanttViewConfig
   formViewConfig?: FormConfig
   customView?: CustomViewComponent
+  statViewConfig?: StatViewConfig
   serverActions?: ServerActionConfig[]  // Centralized ServerActions
   title?: string  // Page title
   description?: string  // Page description

@@ -3,6 +3,7 @@
 import * as React from 'react'
 import {SelectPicker, CheckPicker, TreePicker, CheckTreePicker, Avatar, Badge} from 'rsuite'
 import {cn} from '@/lib/utils'
+import {FieldLabel} from '../Label'
 import type {SelectOption, FieldProps} from '../types'
 
 const PICKER_STYLE = {
@@ -37,13 +38,10 @@ function findOption(options: SelectOption[], value: string): SelectOption | unde
     }
 }
 
-const SIZE = {sm: 'top-3 text-xs', md: 'top-4 text-sm', lg: 'top-5 text-base'}
-
 export function SelectionField({config, value, onChange, error}: FieldProps) {
     const [open, setOpen] = React.useState(false)
     const [options, setOptions] = React.useState<SelectOption[]>(config.options || [])
     const [loading, setLoading] = React.useState(false)
-    const hasValue = value !== null && value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0)
 
     React.useEffect(() => {
         if (!config.fetchUrl) return
@@ -65,7 +63,6 @@ export function SelectionField({config, value, onChange, error}: FieldProps) {
     }, [config.fetchUrl])
 
     const data = React.useMemo(() => toData(options, true), [options])
-    const floating = open || hasValue
 
     const handleChange = (next: any) => {
         if (config.multiple && Array.isArray(next)) onChange(next)
@@ -103,6 +100,7 @@ export function SelectionField({config, value, onChange, error}: FieldProps) {
 
     return (
         <div className="w-full space-y-1">
+            <FieldLabel label={config.label} required={config.required} error={!!error}/>
             <div className="relative">
                 <style>{`.rs-picker-toggle { border-top: 0 !important; border-right: 0 !important; border-left: 0 !important; border-bottom: 0 !important; border-radius: 0 !important; outline: none !important; box-shadow: none !important; }`}</style>
                 <div className={cn(
@@ -157,12 +155,6 @@ export function SelectionField({config, value, onChange, error}: FieldProps) {
                         />
                     )}
                 </div>
-                {config.label && (
-                    <label
-                        className={cn('absolute left-0 z-10 origin-[0] text-muted-foreground duration-200', floating ? '-translate-y-3 scale-75' : 'translate-y-0 scale-100', error ? 'text-destructive' : floating ? 'text-primary' : 'text-muted-foreground', SIZE[config.size || 'md'])}>
-                        {config.label}
-                    </label>
-                )}
                 <div
                     className={cn('absolute bottom-0 left-1/2 h-px w-full -translate-x-1/2 scale-x-0 bg-foreground transition-transform duration-200', open && 'scale-x-100', error && 'bg-destructive')}/>
             </div>

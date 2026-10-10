@@ -2,12 +2,14 @@
 
 import * as React from 'react'
 import { Toggle } from 'rsuite'
+import { FieldLabel } from '../Label'
 import type { FieldProps } from '../types'
 
 export function BooleanField({ config, value, onChange, error }: FieldProps) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-3">
+      <FieldLabel label={config.label} required={config.required} error={!!error} />
+      <div className="pt-0.5">
         <Toggle
           checked={value || false}
           onChange={(checked) => onChange(checked)}
@@ -15,9 +17,6 @@ export function BooleanField({ config, value, onChange, error }: FieldProps) {
           checkedChildren="ON"
           unCheckedChildren="OFF"
         />
-        {config.label && (
-          <span className="text-sm text-foreground/70">{config.label}</span>
-        )}
       </div>
       {(error || config.helper) && (
         <p className="text-xs text-muted-foreground">{error || config.helper}</p>

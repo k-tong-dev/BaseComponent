@@ -14,13 +14,21 @@ export interface FileFieldProps {
   label?: string
   readonly?: boolean
   error?: string | null
+  /** Accepted MIME types for the device picker (default: images). */
+  accept?: string
+  /** Folder inside the bucket that device uploads are stored under. */
+  uploadPath?: string
   onRemove: (index: number) => void
   onAssetSelected?: (asset: StorageFile) => void
 }
 
 const isImageUrl = (url: unknown): url is string =>
   typeof url === 'string' &&
-  (/\.(jpg|jpeg|png|webp|avif|gif|svg|bmp)(\?.*)?$/i.test(url) || url.startsWith('blob:'))
+  (/\.(jpg|jpeg|png|webp|avif|gif|svg|bmp)(\?.*)?$/i.test(url) || url.startsWith('blob:') || url.startsWith('data:image/'))
+
+/** A file is previewable as an image if its URL looks like one or its MIME says so. */
+const isImageFile = (file: UploadedFile): boolean =>
+  isImageUrl(file?.url) || Boolean(file?.metadata?.mimetype?.startsWith('image/'))
 
 const animationsStyle = `
 @keyframes fileEnter {
@@ -114,6 +122,8 @@ export function FileField({
   label,
   readonly,
   error,
+  accept,
+  uploadPath,
   onRemove,
   onAssetSelected,
 }: FileFieldProps) {
@@ -138,26 +148,24 @@ export function FileField({
   return (
     <>
       <style>{animationsStyle}</style>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {!readonly && canPick && (
           <button
             onClick={() => setPickerOpen(true)}
             type="button"
-            className="w-full border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all duration-300 border-muted-foreground/25 hover:border-violet-400/50 hover:bg-gray-100"
+            className="group flex w-full items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-3 py-2.5 text-left transition-all duration-300 hover:border-primary/50 hover:bg-muted/40"
           >
-            <div className="flex flex-col items-center gap-2 pointer-events-none">
-              <div className="p-2.5 rounded-full bg-muted/30">
-                <Upload className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <span className="text-sm text-muted-foreground">
-                {uploadText || (isSingle && fileCount > 0 ? 'Click to replace...' : `Click to upload${label ? ` ${label.toLowerCase()}` : ''}`)}
+            <span className="pointer-events-none flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground transition group-hover:text-primary">
+              <Upload className="h-4 w-4" />
+            </span>
+            <span className="pointer-events-none min-w-0">
+              <span className="block truncate text-xs font-medium text-foreground">
+                {uploadText || (isSingle && fileCount > 0 ? 'Click to replace…' : `Click to upload${label ? ` ${label.toLowerCase()}` : ''}`)}
               </span>
-              {maxFiles && (
-                <span className="text-xs text-muted-foreground/60">
-                  {isSingle ? 'Single file' : `Up to ${maxFiles} files`}
-                </span>
-              )}
-            </div>
+              <span className="block text-[10px] text-muted-foreground">
+                {maxFiles ? (isSingle ? 'Single image' : `Up to ${maxFiles} files`) : 'JPG, PNG, WEBP'}
+              </span>
+            </span>
           </button>
         )}
 
@@ -165,7 +173,7 @@ export function FileField({
 
         {displayFiles.length > 0 && (
           isSingle && displayFiles[0] ? (
-            <div className="w-full max-w-sm">
+            <div className="w-full max-w-[220px]">
               <FilePreview
                 file={displayFiles[0]}
                 index={0}
@@ -189,11 +197,11 @@ export function FileField({
         )}
 
         {displayFiles.length === 0 && !error && (
-          <p className="text-muted-foreground text-sm">No files uploaded yet</p>
+          <p className="text-muted-foreground text-xs">No files uploaded yet</p>
         )}
 
         {maxFiles && fileCount > 0 && (
-          <p className="text-xs text-muted-foreground/60">{fileCount} / {maxFiles} file{maxFiles > 1 ? 's' : ''}</p>
+          <p className="text-[11px] text-muted-foreground/60">{fileCount} / {maxFiles} file{maxFiles > 1 ? 's' : ''}</p>
         )}
       </div>
 
@@ -201,6 +209,9 @@ export function FileField({
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         maxFiles={maxFiles}
+        accept={accept}
+        uploadPath={uploadPath}
+        title={label ? `Select ${label}` : undefined}
         onSelect={(asset) => {
           onAssetSelected?.(asset)
         }}
@@ -242,8 +253,8 @@ function FilePreview({
         ${isSingle ? 'w-full' : 'w-full aspect-[4/3]'}
       `}
     >
-      {isImageUrl(file?.url) ? (
-        <div className={`relative w-full ${isSingle ? 'h-48 sm:h-56' : 'w-full h-full'}`}>
+      {isImageFile(file) ? (
+        <div className={`relative w-full ${isSingle ? 'h-32 sm:h-40' : 'w-full h-full'}`}>
           <img
             src={file.url}
             alt=""
@@ -257,7 +268,7 @@ function FilePreview({
           )}
         </div>
       ) : (
-        <div className={`flex items-center justify-center bg-muted/20 ${isSingle ? 'h-48 sm:h-56' : 'w-full h-full'}`}>
+        <div className={`flex items-center justify-center bg-muted/20 ${isSingle ? 'h-32 sm:h-40' : 'w-full h-full'}`}>
           <FileIcon className="w-10 h-10 text-muted-foreground/40" />
         </div>
       )}
