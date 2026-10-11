@@ -21,6 +21,7 @@ import {Tooltip, TooltipTrigger, TooltipContent} from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/use-auth'
 import { useViewToolbar } from '@/components/Base/ViewToolbar/hooks/useViewToolbar'
 import { ViewToolbar } from '../ViewToolbar'
+import { useDebugValue } from '../Debug'
 
 export function ResourceView({config, onEdit, onCreate, onDelete, loading, entityId, initialData, recordIds, onNavigate, onRefresh, allowCreate, allowEdit}: ResourceViewProps) {
     const searchParams = useSearchParams()
@@ -45,6 +46,17 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
       const urlContext = parseContextFromSearchParams(searchParams)
       return { ...(config.formViewConfig?.context || {}), ...urlContext }
     }, [searchParams, config.formViewConfig?.context])
+
+    // Publish state to the Base DebugPanel (no-op unless debug mode is on).
+    useDebugValue('view-context', viewContext)
+    useDebugValue('resource-config', config)
+    useDebugValue('view-state', {
+      viewType,
+      editingId,
+      selectedIds,
+      filteredRows: currentFilteredData.length,
+      filteredData: currentFilteredData,
+    })
 
     // Set editingId after mount to avoid hydration mismatch
     useEffect(() => {

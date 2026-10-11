@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { showToast } from '@/lib/ui/toast'
+import { useDebugValue } from '../../Debug'
 
 interface UseResourceOptions {
   enabled?: boolean
@@ -65,6 +66,15 @@ export function useResource<T = any>(
     fetchedRef.current = true
     fetchData()
   }, [fetchData, endpoint, options.enabled])
+
+  // Publish fetch state to the Base DebugPanel (no-op unless debug mode is on).
+  useDebugValue('data', {
+    endpoint,
+    loading: state.loading,
+    error: state.error,
+    count: Array.isArray(state.data) ? state.data.length : undefined,
+    data: state.data,
+  })
 
   return {
     ...state,

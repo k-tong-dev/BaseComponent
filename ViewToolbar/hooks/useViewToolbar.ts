@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useViewPresets, type ViewPreset } from './useViewPresets'
 import type { FilterValue } from '@/components/Base/ViewToolbar/Filter'
 import type { SearchValue } from '@/components/Base/Search'
+import { useDebugValue } from '@/components/Base/Debug'
 
 export interface ViewToolbarOptions {
   userId: string
@@ -40,6 +41,15 @@ export function useViewToolbar({ userId, pathname }: ViewToolbarOptions) {
     setFilterValues([])
     setGroupByField(null)
   }, [])
+
+  // Publish toolbar state to the Base DebugPanel (no-op unless debug mode is on).
+  useDebugValue('toolbar', {
+    searchValues,
+    filterValues,
+    groupByField,
+    presets,
+    presetCount: presets.length,
+  })
 
   return {
     searchValues,
