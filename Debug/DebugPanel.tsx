@@ -2,9 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bug, Check, Copy, Trash2, X } from 'lucide-react'
+import { Bug, Check, Copy, RefreshCw, Trash2, X } from 'lucide-react'
 import { useDebug } from './DebugProvider'
-import { clearDebug, getDebugSnapshot, subscribeDebug, type DebugEntry } from './registry'
+import { clearDebug, getDebugSnapshot, subscribeDebug } from './registry'
 
 interface DebugTab {
   key: string
@@ -13,11 +13,15 @@ interface DebugTab {
   sections: string[] | null
 }
 
+/** Sections read live from the browser instead of the debug registry. */
+const BROWSER_KEYS = ['cookies', 'localStorage', 'sessionStorage'] as const
+
 const TABS: DebugTab[] = [
   { key: 'context', label: 'Context', sections: ['view-context', 'view-state'] },
   { key: 'config', label: 'Config', sections: ['resource-config'] },
   { key: 'data', label: 'Data', sections: ['data'] },
   { key: 'toolbar', label: 'Toolbar', sections: ['toolbar'] },
+  { key: 'browser', label: 'Browser', sections: [...BROWSER_KEYS] },
   { key: 'all', label: 'All', sections: null },
 ]
 
@@ -27,6 +31,9 @@ const SECTION_LABELS: Record<string, string> = {
   'resource-config': 'Resource config',
   data: 'Data',
   toolbar: 'Toolbar',
+  cookies: 'Cookies',
+  localStorage: 'Local Storage',
+  sessionStorage: 'Session Storage',
 }
 
 /** Clipboard write that cannot throw — falls back to a hidden textarea. */
@@ -54,17 +61,81 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-function pretty(entry: DebugEntry): string {
+interface SectionData {
+  section: string
+  preview: any
+  /** Optional one-line hint shown between the title and the JSON body. */
+  note?: string
+}
+
+/** Read `document.cookie` into a name→value map (httpOnly cookies are hidden). */
+function readCookies(): Record<string, string> {
+  const out: Record<string, string> = {}
   try {
-    return JSON.stringify(entry.preview, null, 2)
+    const raw = document.cookie
+    if (!raw) return out
+    for (const part of raw.split(';')) {
+      const eq = part.indexOf('=')
+      const name = (eq === -1 ? part : part.slice(0, eq)).trim()
+      if (!name) continue
+      const value = eq === -1 ? '' : part.slice(eq + 1).trim()
+      try {
+        out[name] = decodeURIComponent(value)
+      } catch {
+        out[name] = value
+      }
+    }
   } catch {
-    return String(entry.preview)
+    /* ignore */
+  }
+  return sortRecord(out)
+}
+
+/** Read a Web Storage object into a name→value map. */
+function readStorage(getStore: () => Storage): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    const store = getStore()
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i)
+      if (key == null) continue
+      out[key] = store.getItem(key) ?? ''
+    }
+  } catch {
+    /* ignore (storage unavailable / blocked) */
+  }
+  return sortRecord(out)
+}
+
+function sortRecord(input: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of Object.keys(input).sort((a, b) => a.localeCompare(b))) out[key] = input[key]
+  return out
+}
+
+interface BrowserSnapshot {
+  cookies: Record<string, string>
+  localStorage: Record<string, string>
+  sessionStorage: Record<string, string>
+}
+
+function readBrowserSnapshot(): BrowserSnapshot {
+  return {
+    cookies: readCookies(),
+    localStorage: readStorage(() => window.localStorage),
+    sessionStorage: readStorage(() => window.sessionStorage),
   }
 }
 
-function Section({ entry }: { entry: DebugEntry }) {
+function Section({ section, preview, note }: SectionData) {
   const [copied, setCopied] = useState(false)
-  const text = pretty(entry)
+  const text = useMemo(() => {
+    try {
+      return JSON.stringify(preview, null, 2)
+    } catch {
+      return String(preview)
+    }
+  }, [preview])
 
   const onCopy = useCallback(async () => {
     const ok = await copyText(text)
@@ -78,7 +149,7 @@ function Section({ entry }: { entry: DebugEntry }) {
     <section className="mb-3">
       <header className="flex items-center justify-between gap-2 rounded-t-md bg-slate-800 px-2 py-1">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-200">
-          {SECTION_LABELS[entry.section] || entry.section}
+          {SECTION_LABELS[section] || section}
         </span>
         <button
           type="button"
@@ -90,6 +161,11 @@ function Section({ entry }: { entry: DebugEntry }) {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </header>
+      {note ? (
+        <div className="border-x border-slate-700 bg-slate-900/70 px-2 py-1 text-[10px] leading-4 text-slate-400">
+          {note}
+        </div>
+      ) : null}
       <pre className="max-h-[46vh] overflow-auto rounded-b-md border border-t-0 border-slate-700 bg-slate-900 p-2 text-[11px] leading-4 text-slate-100">
         {text}
       </pre>
@@ -261,14 +337,45 @@ export function DebugPanel() {
   const { available, enabled, toggle } = useDebug()
   const entries = useSyncExternalStore(subscribeDebug, getDebugSnapshot, getDebugSnapshot)
   const [activeTab, setActiveTab] = useState('context')
+  const [browser, setBrowser] = useState<BrowserSnapshot>({
+    cookies: {},
+    localStorage: {},
+    sessionStorage: {},
+  })
   const pathname = usePathname()
 
   const tab = useMemo(() => TABS.find((t) => t.key === activeTab) || TABS[0], [activeTab])
 
-  const visible = useMemo(() => {
-    if (!tab.sections) return entries
-    return entries.filter((entry) => tab.sections!.includes(entry.section))
-  }, [entries, tab])
+  const showBrowser = useMemo(
+    () =>
+      !tab.sections ||
+      tab.sections.some((section) => (BROWSER_KEYS as readonly string[]).includes(section)),
+    [tab],
+  )
+
+  const refreshBrowser = useCallback(() => {
+    setBrowser(readBrowserSnapshot())
+  }, [])
+
+  // (Re)read cookies & storage when the panel opens or a tab that shows them is selected.
+  useEffect(() => {
+    if (enabled && showBrowser) refreshBrowser()
+  }, [enabled, showBrowser, refreshBrowser])
+
+  const visible = useMemo<SectionData[]>(() => {
+    const registry = !tab.sections ? entries : entries.filter((entry) => tab.sections!.includes(entry.section))
+    const out: SectionData[] = registry.map((entry) => ({ section: entry.section, preview: entry.preview }))
+    if (showBrowser) {
+      out.push({
+        section: 'cookies',
+        preview: browser.cookies,
+        note: 'httpOnly cookies are not visible to JavaScript.',
+      })
+      out.push({ section: 'localStorage', preview: browser.localStorage })
+      out.push({ section: 'sessionStorage', preview: browser.sessionStorage })
+    }
+    return out
+  }, [entries, tab, showBrowser, browser])
 
   if (!available) return null
 
@@ -285,10 +392,21 @@ export function DebugPanel() {
           <Bug size={16} className="text-emerald-400" />
           <span className="text-sm font-semibold">Debug</span>
           <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
-            {entries.length} section{entries.length === 1 ? '' : 's'}
+            {visible.length} section{visible.length === 1 ? '' : 's'}
           </span>
         </div>
         <div className="flex items-center gap-1">
+          {showBrowser ? (
+            <button
+              type="button"
+              onClick={refreshBrowser}
+              title="Refresh cookies & storage"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              <RefreshCw size={13} />
+              Refresh
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={clearDebug}
@@ -338,7 +456,9 @@ export function DebugPanel() {
             Nothing published on this tab yet.
           </p>
         ) : (
-          visible.map((entry) => <Section key={entry.section} entry={entry} />)
+          visible.map((entry) => (
+            <Section key={entry.section} section={entry.section} preview={entry.preview} note={entry.note} />
+          ))
         )}
       </div>
     </div>
