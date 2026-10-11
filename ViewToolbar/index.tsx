@@ -116,14 +116,18 @@ export function ViewToolbar({ toolbar, columns = [], currentViewType = 'list', o
           </Whisper>
         )}
         <Dropdown placement="bottomEnd" renderToggle={(props: any, ref: any) => (
-          <button
-            ref={ref}
-            {...props}
-            title="View presets"
-            className="inline-flex h-9 items-center justify-center rounded-sm px-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/60"
-          >
-            <Bookmark size={16} color="orange" />
-          </button>
+          <Whisper placement="top"
+                   controlId="control-id-hover"
+                   trigger="hover"
+                   speaker={<Tooltip>{translate('View presets')}</Tooltip>}>
+            <Button
+              ref={ref}
+              {...props}
+              appearance="subtle"
+            >
+              <Bookmark size={16} color="orange" />
+            </Button>
+          </Whisper>
         )}
         >
           <Dropdown.Item
@@ -134,7 +138,7 @@ export function ViewToolbar({ toolbar, columns = [], currentViewType = 'list', o
             icon={<Bookmark className="w-3.5 h-3.5 pointer-events-none" color="orange" />}
             className="text-xs font-medium"
           >
-            Save current view
+              {translate("Save current view")}
           </Dropdown.Item>
           {presets.map((preset) => (
             <Dropdown.Item
@@ -159,7 +163,7 @@ export function ViewToolbar({ toolbar, columns = [], currentViewType = 'list', o
           ))}
           {presets.length === 0 && (
             <Dropdown.Item disabled className="justify-center text-xs text-muted-foreground">
-              No saved presets
+                {translate("No saved presets")}
             </Dropdown.Item>
           )}
         </Dropdown>

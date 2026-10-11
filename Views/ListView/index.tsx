@@ -803,6 +803,7 @@ export function ListView({
                                                     <label key={column.key}
                                                            className="flex items-center gap-2 cursor-pointer">
                                                         <Checkbox
+                                                            color={"violet"}
                                                             checked={visibleColumns.some(col => col.key === column.key)}
                                                             onChange={(value, checked) => {
                                                                 if (checked) {
