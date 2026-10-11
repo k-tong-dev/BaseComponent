@@ -202,6 +202,25 @@ export interface FormConfig {
     readonly?: boolean
     helper?: string
   }>
+  stateActions?: Array<{    // Odoo-style state transition buttons (Draft → Confirmed → …)
+    from: string | string[] // visible only when the current status matches
+    to: string              // new status value
+    label: string
+    icon?: React.ReactNode
+    variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+    confirm?: string        // shows an "unsaved changes" confirm dialog first
+  }>
+  fieldActions?: Array<{    // Buttons that write any field (Publish ↔ Unpublish, …)
+    field: string           // field key to write
+    value: any              // value to write to it
+    label: string
+    icon?: React.ReactNode
+    variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+    showWhen?: (data: any) => boolean   // visibility predicate (mutually exclusive pairs)
+    confirm?: string
+    className?: string      // extra classes for the button
+    style?: React.CSSProperties
+  }>
   actions: { /* ... */ }
   breadcrumbs: { /* ... */ }
 }
@@ -1238,6 +1257,68 @@ export const productFormConfig: FormConfig = {
 ### Smart Action Buttons
 - **Create Mode**: Only shows Cancel/Create buttons
 - **Edit Mode**: Shows full action dropdown (Print, Export, Duplicate, Archive, Delete)
+
+## 🎛️ Header Action Buttons
+
+Two config-driven button rows render above the form **in edit mode only**. Both build the
+next form state explicitly and save it through the normal form save flow — they never
+rely on a `setTimeout(handleSubmit)` closure, which would POST the stale (pre-change) data.
+
+### `stateActions` — status transitions
+
+Each button appears only while the record's `status` matches `from`, and writes `to`:
+
+```typescript
+stateActions: [
+  { from: 'draft', to: 'confirmed', label: 'Confirm', variant: 'primary' },
+  { from: 'paid', to: 'done', label: 'Mark Done', variant: 'default' },
+  { from: ['draft', 'confirmed'], to: 'cancelled', label: 'Cancel Order',
+    variant: 'default', confirm: 'Are you sure you want to cancel this order?' },
+]
+```
+
+### `fieldActions` — toggle any field
+
+Same mechanics, but for an arbitrary field/value. `showWhen` controls visibility, which is
+how you build **mutually exclusive pairs** — exactly one of the pair is ever on screen:
+
+```typescript
+import { createElement } from 'react'
+import { Globe, GlobeLock } from 'lucide-react'
+
+fieldActions: [
+  { field: 'published', value: true,  label: 'Publish',
+    icon: createElement(Globe, { size: 14 }) },
+  { field: 'published', value: false, label: 'Unpublish',
+    icon: createElement(GlobeLock, { size: 14 }),
+    showWhen: (data) => Boolean(data.published) },
+]
+```
+
+With the `showWhen` predicates above, **Publish** only shows while `published` is falsy and
+**Unpublish** only shows while it is truthy — so both button act on the same field and one
+shows must one hide.
+
+Styling: `className` and `style` are passed straight through to the underlying rsuite
+`Button`, so you can restyle or position an individual action.
+
+| Property | Purpose |
+|---|---|
+| `field` / `value` | the field the button writes |
+| `label` | button text (translated) |
+| `icon` | any `React.ReactNode`, typically `createElement(Icon, { size: 14 })` |
+| `variant` | `default \| primary \| link \| subtle \| ghost` |
+| `showWhen` | visibility predicate over the current form data |
+| `confirm` | shows the unsaved-changes confirm dialog before saving |
+| `className` / `style` | extra button styling |
+
+### When to use `fieldActions` vs ServerActions
+
+- **`fieldActions`** — the action's whole job is to change one field on the record being
+  edited and save. Keep it inline next to the form.
+- **ServerActions** (see [ServerActions README](../Actions/README.md)) — anything that
+  calls an endpoint, has confirm flows, or should live in the Actions dropdown. This is
+  where heavier per-record actions belong; it also gives you bulk-mode behaviour for free.
 
 ### Change Tracking
 - Automatically detects form changes

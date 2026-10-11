@@ -210,6 +210,10 @@ export interface FormConfig {
         /** Only render the button when this returns true. */
         showWhen?: (data: any) => boolean
         confirm?: string
+        /** Extra classes for the button (e.g. to colour a destructive action). */
+        className?: string
+        /** Inline styles for the button. */
+        style?: React.CSSProperties
     }>
     /**
      * Odoo-style view context: a key-value dict that views and actions can read.
@@ -653,6 +657,32 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         } finally {
             setSaving(false)
         }
+    }
+
+    /**
+     * Apply a field patch (e.g. `{ status: 'confirmed' }`, `{ published: true }`)
+     * and save it immediately.
+     *
+     * The next form state is built **explicitly** and passed to `handleSubmit` —
+     * calling `handleSubmit()` after `setData` would send the stale (pre-change)
+     * data to the API. Shared by `stateActions` and `fieldActions`.
+     */
+    const applyFieldPatch = async (patch: Record<string, any>, confirmMessage?: string) => {
+        const nextData = { ...data, ...patch }
+        if (confirmMessage) {
+            setShowUnsavedWarning(true)
+            setPendingUnsavedAction({
+                onDiscard: async () => {
+                    setData(nextData)
+                    setHasChanges(true)
+                    await handleSubmit(nextData)
+                }
+            })
+            return
+        }
+        setData(nextData)
+        setHasChanges(true)
+        await handleSubmit(nextData)
     }
 
     const navigateTo = (recordId: string | number) => {
@@ -1396,24 +1426,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 appearance={action.variant || 'primary'}
                                 onClick={async () => {
-                                    // Build the next form state explicitly and submit it
-                                    // directly — calling handleSubmit() after setData
-                                    // would send the stale (pre-change) status to the API.
-                                    const nextData = { ...data, status: action.to }
-                                    if (action.confirm) {
-                                        setShowUnsavedWarning(true)
-                                        setPendingUnsavedAction({
-                                            onDiscard: async () => {
-                                                setData(nextData)
-                                                setHasChanges(true)
-                                                await handleSubmit(nextData)
-                                            }
-                                        })
-                                        return
-                                    }
-                                    setData(nextData)
-                                    setHasChanges(true)
-                                    await handleSubmit(nextData)
+                                    await applyFieldPatch({ status: action.to }, action.confirm)
                                 }}
                                 disabled={saving}
                             >
@@ -1437,23 +1450,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 appearance={action.variant || 'primary'}
                                 onClick={async () => {
-                                    // Submit the new value directly (see stateActions above).
-                                    const nextData = { ...data, [action.field]: action.value }
-                                    if (action.confirm) {
-                                        setShowUnsavedWarning(true)
-                                        setPendingUnsavedAction({
-                                            onDiscard: async () => {
-                                                setData(nextData)
-                                                setHasChanges(true)
-                                                await handleSubmit(nextData)
-                                            }
-                                        })
-                                        return
-                                    }
-                                    setData(nextData)
-                                    setHasChanges(true)
-                                    await handleSubmit(nextData)
+                                    await applyFieldPatch({ [action.field]: action.value }, action.confirm)
                                 }}
+                                className={action.className}
+                                style={action.style}
                                 disabled={saving}
                             >
                                 {action.icon}
