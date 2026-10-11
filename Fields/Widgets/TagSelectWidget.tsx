@@ -82,7 +82,8 @@ export const TagSelectWidget: React.FC<FieldWidgetProps> = ({
       onChange={(newValue: any) => {
         onChange(newValue)
       }}
-      disabled={disabled || readonly}
+      readOnly={readonly}
+      disabled={disabled}
       loading={loading}
       block
       placeholder={`Select ${field.label.toLowerCase()}`}

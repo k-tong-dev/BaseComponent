@@ -476,7 +476,7 @@ export const One2ManyListWidget: React.FC<any> = ({ value, onChange, field, read
   const showActions = !isReadonly
 
   return (
-    <div className="space-y-2">
+    <div className={cn('space-y-2', disabled && 'pointer-events-none opacity-60')}>
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full border-collapse text-xs">
           <thead className="bg-muted/50">

@@ -103,14 +103,15 @@ export function Many2ManyField({ config, value, onChange, error }: FieldProps) {
             block
             loading={loading}
             placeholder={config.placeholder || ' '}
-            disabled={config.readonly}
+            readOnly={config.readonly}
+            disabled={config.disabled}
             onSearch={(kw) => { if (kw.length >= 1) fetchOptions(kw) }}
             onOpen={() => setOpen(true)}
             onClose={() => setOpen(false)}
             renderValue={(value, items, tags) => {
               return <div className="flex flex-wrap gap-0.5 py-0.5">{tags}</div>
             }}
-            tagProps={{ color: 'violet', closable: !config.readonly, size: 'sm' }}
+            tagProps={{ color: 'violet', closable: !config.readonly && !config.disabled, size: 'sm' }}
             style={PICKER_STYLE}
             size={config.size || 'md'}
             cleanable={true}

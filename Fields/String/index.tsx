@@ -29,7 +29,8 @@ export function StringField({ config, value, onChange, error }: FieldProps) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(val: string) => onChange(val)}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           style={{
             borderTop: '0',
             borderRight: '0',

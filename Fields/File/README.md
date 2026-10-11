@@ -25,7 +25,8 @@ A drag-and-drop file upload field that integrates with Supabase Storage via the 
 | `accept` | `string` | `'image/*'` | Accepted MIME types |
 | `uploadText` | `string` | — | Custom drop-zone label |
 | `label` | `string` | — | Field label |
-| `readonly` | `boolean` | — | Disable interactions |
+| `readonly` | `boolean` | — | View-only: hides upload/remove affordances, keeps normal look |
+| `disabled` | `boolean` | — | Additionally mutes the control (greyed); independent of `readonly` |
 | `error` | `string` | — | Validation error message |
 | `onFilesSelected` | `(files: File[]) => void` | required | Called when user drops/selects native files |
 | `onRemove` | `(index: number) => void` | required | Called when user removes a file |

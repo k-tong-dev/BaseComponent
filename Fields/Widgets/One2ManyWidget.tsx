@@ -285,10 +285,12 @@ export const One2ManyWidget: React.FC<FieldWidgetProps> = ({
     )
   }
   
+  // Readonly hides the edit affordances but keeps the normal look; disabled
+  // additionally mutes the control.
   if (readonly || disabled) {
     return (
-      <div className="border rounded p-4 bg-gray-50">
-        <p className="text-sm text-gray-500">
+      <div className={disabled ? 'border rounded p-4 bg-gray-50 opacity-60' : 'border rounded p-4'}>
+        <p className={disabled ? 'text-sm text-gray-500' : 'text-sm text-muted-foreground'}>
           {items.length} {items.length === 1 ? 'record' : 'records'} (read-only)
         </p>
       </div>

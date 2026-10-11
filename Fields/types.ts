@@ -17,7 +17,17 @@ export interface FieldConfig {
   label?: string
   placeholder?: string
   required?: boolean
+  /**
+   * Readonly: the value cannot be edited but is still shown, selectable and
+   * submitted. Maps to the control's native `readOnly` attribute.
+   */
   readonly?: boolean
+  /**
+   * Disabled: a separate, isolated state from `readonly`. A disabled control
+   * cannot be focused or edited and is rendered muted. Maps to the control's
+   * native `disabled` attribute — setting `readonly` must never set this.
+   */
+  disabled?: boolean
   helper?: string
   options?: SelectOption[]
   fetchUrl?: string

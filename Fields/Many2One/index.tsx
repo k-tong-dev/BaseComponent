@@ -68,7 +68,8 @@ export function Many2OneField({ config, value, onChange, error }: FieldProps) {
             block
             loading={loading}
             placeholder={config.placeholder || ' '}
-            disabled={config.readonly}
+            readOnly={config.readonly}
+            disabled={config.disabled}
             style={PICKER_STYLE}
             onOpen={() => setOpen(true)}
             onClose={() => setOpen(false)}

@@ -29,7 +29,8 @@ export function HtmlField({ config, value, onChange, error }: FieldProps) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(val: string) => onChange(val)}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           rows={8}
           autosize
 
@@ -42,7 +43,7 @@ export function HtmlField({ config, value, onChange, error }: FieldProps) {
             boxShadow: 'none',
           }}
           className={cn(
-            'peer w-full resize-y border-0 border-b-1 border-b-foreground bg-transparent px-0 text-foreground transition-colors duration-200 rounded-none font-mono text-sm disabled:cursor-not-allowed disabled:opacity-50',
+            'peer w-full resize-y border-0 border-b-1 border-b-foreground bg-transparent px-0 text-foreground transition-colors duration-200 rounded-none font-mono text-sm',
             error && 'border-b-destructive',
             sizeStyles[config.size || 'md'].input,
           )}

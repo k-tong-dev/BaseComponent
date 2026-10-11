@@ -149,7 +149,8 @@ export interface FormField {
   label: string
   type: 'number' | 'file' | 'array' | 'json' | 'checkbox' | 'boolean' | 'toggle' | 'date' | 'datetime' | 'time' | 'year' | 'month' | 'day' | 'one2many' | 'many2many' | 'many2one' | 'selection' | 'string' | 'html'
   required?: boolean
-  readonly?: boolean
+  readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+  disabled?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
   helper?: string
   placeholder?: string
   options?: Array<{ label: string; value: string }>
@@ -443,10 +444,28 @@ export const productFormConfig: FormConfig = {
 ```
 
 **Readonly Features:**
-- Input is disabled and cannot be edited
-- Gray background indicates read-only state
-- Cursor shows "not-allowed" on hover
-- Ideal for auto-generated fields, timestamps, IDs
+- Input cannot be edited (`readOnly`, **not** `disabled`)
+- Keeps its normal look — value stays visible, selectable and copyable
+- The value is still submitted with the record
+- Ideal for auto-generated fields, timestamps, IDs and computed values
+
+> `readonly` and `disabled` are **separate** states. A readonly field must never be
+> rendered as a disabled control.
+
+### Disabled Field
+```typescript
+{
+  key: 'locked_note',
+  label: 'Locked Note',
+  type: 'string',
+  disabled: true
+}
+```
+
+**Disabled Features:**
+- Input is truly disabled: it cannot be focused or edited (`disabled`)
+- Rendered muted (greyed) with a `not-allowed` cursor
+- Use for temporarily unavailable controls, not for “view-only” values
 
 ### Helper Field
 ```typescript
@@ -606,6 +625,29 @@ context), handy for mode-based logic:
   readonly: "status != 'draft'",   // editable only while the order is draft
 }
 ```
+
+`readonly` marks the value as view-only — it still looks like a normal field, can
+be selected and copied, and is submitted with the record. It maps to the control's
+`readOnly`, **never** to `disabled`.
+
+### disabled
+
+`disabled` is a separate, independent state (same boolean / expression / function
+forms as `readonly`):
+
+```typescript
+{
+  key: 'coupon_code',
+  label: 'Coupon Code',
+  type: 'string',
+  disabled: "payment_method != 'coupon'",   // greyed out unless a coupon applies
+}
+```
+
+A disabled field cannot be focused or edited and renders muted. Because it is
+independent, you can combine the two — e.g. `readonly: true` for a computed value
+that still copies nicely, or `disabled: true` for a control that is temporarily
+unavailable. Setting `readonly` must **not** disable the control.
 
 ### default
 

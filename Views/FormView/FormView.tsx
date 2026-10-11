@@ -101,8 +101,20 @@ export interface FormField {
     /**
      * Odoo-style readonly: boolean, expression string (e.g. "status != 'draft'"),
      * or a function. Evaluated against current form values on every render.
+     *
+     * A readonly field keeps its value, is still submitted with the record and
+     * stays selectable/copyable — it simply cannot be edited. It is NOT the same
+     * as `disabled` (see below).
      */
     readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style disabled: boolean, expression string or function, resolved like
+     * `readonly`. A disabled field cannot be focused or edited and is rendered
+     * muted. `readonly` and `disabled` are independent — a field can be readonly
+     * without being disabled (the historical bug this fixes was mapping readonly
+     * onto the control's `disabled` attribute).
+     */
+    disabled?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
     /**
      * Odoo-style computed field (onchange): the value is recomputed whenever
      * any form value changes, and the field is forced readonly in the form.
@@ -796,9 +808,14 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
 
         const readonly = formReadonly || resolveCondition(field.readonly, data, condCtx) || Boolean(field.computed)
+        // `disabled` is a separate, isolated state — it must never be inferred
+        // from `readonly`. Only an explicit `disabled` (or the whole form being
+        // readonly, which locks every control) disables the input.
+        const disabled = resolveCondition(field.disabled, data, condCtx)
+        const locked = readonly || disabled
         const value = data[field.key]
         const onChange = (newValue: any) => {
-            if (readonly) return
+            if (locked) return
             setData({...data, [field.key]: newValue})
         }
 
@@ -840,7 +857,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             onChange={onChange}
                             field={field}
                             data={data}
-                            disabled={readonly}
+                            disabled={disabled}
                             readonly={readonly}
                         />
                         {errorMessage && (
@@ -866,7 +883,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             value={value}
                             onChange={onChange}
                             data={data}
-                            disabled={readonly}
+                            disabled={disabled}
                             readonly={readonly}
                         />
                         {errorMessage && (
@@ -885,10 +902,11 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             value={value ?? null}
                             onChange={(val) => onChange(val ?? 0)}
                             placeholder={field.placeholder}
-                            disabled={readonly}
+                            readOnly={readonly}
+                            disabled={disabled}
                             error={hasError}
                             fullWidth
-                            className={readonly ? 'opacity-60 cursor-not-allowed' : ''}
+                            className={disabled ? 'opacity-60 cursor-not-allowed' : ''}
                             min={0}
                             controls={false}
                         />
@@ -908,6 +926,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         uploadPath={field.uploadPath}
                         label={translate(field.label)}
                         readonly={readonly}
+                        disabled={disabled}
                         error={errorMessage}
                         onRemove={removeFile}
                         onAssetSelected={(asset) => {
@@ -929,7 +948,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <label className="text-sm font-medium">{translate(field.label)}</label>
-                            {!readonly && (
+                            {!locked && (
                                 <Button onClick={() => addArrayItem(field.key)} size="sm" className="gap-2">
                                     <Plus className="w-4 h-4"/>
                                     Add Item
@@ -945,9 +964,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                     variant="outlined"
                                     inputSize="sm"
                                     fullWidth
-                                    disabled={readonly}
+                                    readOnly={readonly}
+                                    disabled={disabled}
                                 />
-                                {!readonly && (
+                                {!locked && (
                                     <Button
                                         onClick={() => removeArrayItem(field.key, index)}
                                         size="sm"
@@ -972,7 +992,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             id={field.key}
                             checked={value || false}
                             onChange={(e) => onChange(e.target.checked)}
-                            disabled={readonly}
+                            disabled={locked}
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <label htmlFor={field.key} className="text-sm font-medium">
@@ -989,8 +1009,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 checkedChildren={"ON"}
                                 unCheckedChildren={"OFF"}
-                                disabled={readonly}
-                                onClick={() => !readonly && onChange(!value)}>
+                                readOnly={readonly}
+                                disabled={disabled}
+                                onClick={() => !locked && onChange(!value)}>
                         </Switch>
                     </div>
                 )
@@ -1006,6 +1027,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1027,6 +1049,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1047,6 +1070,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'HH:mm:ss',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1068,6 +1092,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'yyyy',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1089,6 +1114,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'yyyy-MM',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1110,6 +1136,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'dd',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1130,6 +1157,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 size: field.size,
@@ -1151,6 +1179,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 size: field.size,
@@ -1172,6 +1201,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 labelKey: field.labelKey,
@@ -1201,6 +1231,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 options: selOptions as any,
                                 fetchUrl: field.fetchUrl,
@@ -1229,6 +1260,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1250,6 +1282,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
