@@ -721,7 +721,7 @@ export function ListView({
                         <Center>
                             <Checkbox
                                 inline
-                                className={"w-[16px]"}
+                                className={"w-4"}
                                 color={"violet"}
                                 checked={paginatedData.length > 0 && paginatedData.every(row => currentSelectedIds.includes(row.id || row._id))}
                                 indeterminate={paginatedData.length > 0 && currentSelectedIds.length > 0 && !paginatedData.every(row => currentSelectedIds.includes(row.id || row._id))}
@@ -742,7 +742,7 @@ export function ListView({
                                         <Checkbox
                                             checked={allChildrenSelected}
                                             color={"violet"}
-                                            className={"w-[16px]"}
+                                            className={"w-4"}
                                             indeterminate={someChildrenSelected && !allChildrenSelected}
                                             onChange={(value, checked, event) => {
                                                 event?.stopPropagation()
@@ -758,7 +758,7 @@ export function ListView({
                                 <div onClick={(e) => e.stopPropagation()}>
                                     <Checkbox
                                         color="violet"
-                                        className={"w-[16px]"}
+                                        className={"w-4"}
                                         checked={currentSelectedIds.includes(rowData._originalId || rowData.id || rowData._id)}
                                         onChange={(value, checked, event) => {
                                             event?.stopPropagation()
@@ -770,7 +770,7 @@ export function ListView({
                         }}
                     </Cell>
                 </Column>
-                <Column width={50} align="center" fixed resizable={false}>
+                <Column width={30} align="center" fixed resizable={false}>
                     <HeaderCell style={{padding: 0}} className={"uppercase"}>
                         <Center>
                             <span className="text-xs text-gray-500">N<sup>o</sup></span>
@@ -784,7 +784,7 @@ export function ListView({
                     </Cell>
                 </Column>
 
-                <Column width={30} align="center" fixed>
+                <Column width={25} align="center" fixed>
                     <HeaderCell style={{padding: 0}}>
                         <Center>
                             <Whisper
@@ -793,7 +793,7 @@ export function ListView({
                                 speaker={
                                     <Popover style={{padding: 0}}>
                                         <div
-                                            className="p-4 min-w-[300px] max-h-[400px] overflow-y-auto no-scrollbar"
+                                            className="p-4 min-w-75 max-h-100 overflow-y-auto no-scrollbar"
                                         >
                                             <div className="flex items-center justify-between mb-3">
                                                 <span className="font-medium">Select Columns</span>
