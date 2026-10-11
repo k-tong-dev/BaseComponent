@@ -24,7 +24,8 @@ export function DateField({ config, value, onChange, error }: FieldProps) {
           onClose={() => setOpen(false)}
           placeholder={config.placeholder || ' '}
           editable={false}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           className={cn(
             'w-full bg-transparent border-b-1 border-b-foreground text-foreground rounded-none disabled:cursor-not-allowed disabled:opacity-50',
             error ? 'border-destructive' : 'border-border',

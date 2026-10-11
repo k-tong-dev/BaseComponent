@@ -29,7 +29,8 @@ export function TextareaField({ config, value, onChange, error }: FieldProps) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(val: string) => onChange(val)}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           rows={4}
           style={{
             borderTop: '0',

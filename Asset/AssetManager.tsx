@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { FileGrid } from './FileGrid'
 import type { StorageFile, StorageFolder } from './types'
+import { showToast } from '@/components/ui/notification'
+import { copyText } from '../clipboard'
 import {Modal, Input, Button, StatGroup, Stat, StatLabel, StatValue, StatHelpText, HStack} from 'rsuite'
 import {FaFolderPlus} from "react-icons/fa6";
 
@@ -663,7 +665,14 @@ export function AssetManager() {
                   <div className="flex items-center gap-1 mt-0.5 bg-muted/50 rounded-md px-2 py-1.5">
                     <p className="font-mono text-xs text-foreground/60 truncate flex-1 min-w-0">{detailFile.url}</p>
                     <button
-                      onClick={() => navigator.clipboard.writeText(detailFile.url)}
+                      onClick={async () => {
+                        const copied = await copyText(detailFile.url)
+                        showToast(
+                          copied ? 'success' : 'error',
+                          copied ? 'Copied' : 'Copy failed',
+                          copied ? 'File URL copied to the clipboard' : 'The browser blocked the copy — check clipboard permissions',
+                        )
+                      }}
                       className="shrink-0 p-1 rounded-md hover:bg-background transition-colors text-muted-foreground/50 hover:text-foreground/80"
                       title="Copy URL"
                     >

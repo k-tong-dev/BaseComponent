@@ -28,9 +28,10 @@ export function DayField({ config, value, onChange, error }: FieldProps) {
           onClose={() => setOpen(false)}
           placeholder={config.placeholder || ' '}
           editable={false}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           className={cn(
-            'w-full bg-transparent border-b-1 border-b-foreground text-foreground rounded-none disabled:cursor-not-allowed disabled:opacity-50',
+            'w-full bg-transparent border-b-1 border-b-foreground text-foreground rounded-none',
             error ? 'border-destructive' : 'border-border',
             config.size === 'sm' ? 'text-sm' : config.size === 'lg' ? 'text-base' : 'text-sm',
           )}

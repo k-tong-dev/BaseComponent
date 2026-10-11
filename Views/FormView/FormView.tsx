@@ -101,8 +101,20 @@ export interface FormField {
     /**
      * Odoo-style readonly: boolean, expression string (e.g. "status != 'draft'"),
      * or a function. Evaluated against current form values on every render.
+     *
+     * A readonly field keeps its value, is still submitted with the record and
+     * stays selectable/copyable — it simply cannot be edited. It is NOT the same
+     * as `disabled` (see below).
      */
     readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+    /**
+     * Odoo-style disabled: boolean, expression string or function, resolved like
+     * `readonly`. A disabled field cannot be focused or edited and is rendered
+     * muted. `readonly` and `disabled` are independent — a field can be readonly
+     * without being disabled (the historical bug this fixes was mapping readonly
+     * onto the control's `disabled` attribute).
+     */
+    disabled?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
     /**
      * Odoo-style computed field (onchange): the value is recomputed whenever
      * any form value changes, and the field is forced readonly in the form.
@@ -193,6 +205,29 @@ export interface FormConfig {
         confirm?: string
     }>
     /**
+     * Field action buttons (e.g. "Publish to Website" / "Unpublish to Website",
+     * "Active" / "Unactive"). Each button writes `value` to `field` and saves.
+     *
+     * `showWhen` decides visibility — used to make a pair of buttons mutually
+     * exclusive (only one is visible at a time).
+     */
+    fieldActions?: Array<{
+        /** Field key this button writes to. */
+        field: string
+        /** Value written to that field. */
+        value: any
+        label: string
+        icon?: React.ReactNode
+        variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+        /** Only render the button when this returns true. */
+        showWhen?: (data: any) => boolean
+        confirm?: string
+        /** Extra classes for the button (e.g. to colour a destructive action). */
+        className?: string
+        /** Inline styles for the button. */
+        style?: React.CSSProperties
+    }>
+    /**
      * Odoo-style view context: a key-value dict that views and actions can read.
      * Can be set from URL params, props, or programmatically. Used for defaults,
      * visibility rules, and passing data between views.
@@ -216,6 +251,23 @@ export interface Entity {
 // Mutable entity type for form state
 export type MutableEntity = {
     [key: string]: any
+}
+
+/**
+ * Collect the stored file objects from a record's `file` fields.
+ *
+ * Shared by the form's initial data effect and by the refresh handler so both
+ * paths restore the file widgets identically.
+ */
+function filesFromRecord(config: FormConfig, record: any): StorageFile[] {
+    return (config.fields || [])
+        .filter(f => f.type === 'file')
+        .flatMap(f => {
+            const val = record?.[f.key]
+            if (!val) return []
+            return Array.isArray(val) ? val : [val]
+        })
+        .filter((v: any): v is StorageFile => Boolean(v) && typeof v.id === 'string' && typeof v.url === 'string')
 }
 
 interface FormViewProps<T extends Entity> {
@@ -287,7 +339,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }, [mode, entityId, recordIds, internalRecordIds, config.apiEndpoint])
 
-    // Central refresh handler — re-fetches current record and updates form state
+    // Central refresh handler — re-fetches the current record and updates the
+    // form state with it. This is a *data* refresh: it re-reads the record from
+    // the API (never reloads the page), so unsaved edits are replaced by what
+    // is stored on the server and file fields are restored too.
     const handleFormRefresh = useCallback(async () => {
         if (!entityId) return
         try {
@@ -296,6 +351,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 const record = await res.json()
                 setData(record)
                 setOriginalData(record)
+                setUploadedFiles(filesFromRecord(config, record))
                 setHasChanges(false)
             } else if (res.status === 404) {
                 // Record was deleted — navigate to list
@@ -334,15 +390,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             setData(completeData as MutableEntity)
             setOriginalData(completeData as MutableEntity)
             // Initialize uploadedFiles from JSON stored in file fields
-            const fileFieldValues = config.fields
-                .filter(f => f.type === 'file')
-                .flatMap(f => {
-                    const val = initialData[f.key]
-                    if (!val) return []
-                    if (Array.isArray(val)) return val
-                    return [val]
-                })
-            const validFiles = fileFieldValues.filter((v): v is StorageFile => v && typeof v.id === 'string' && typeof v.url === 'string')
+            const validFiles = filesFromRecord(config, initialData)
             console.log('[FileInit] JSON files from initialData:', validFiles)
             setUploadedFiles(validFiles)
             setLoading(false)
@@ -518,7 +566,16 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         // `overrideData` lets state-action buttons submit a specific form state
         // (e.g. a new `status`) without relying on the async `setData` closure,
         // which would otherwise send the stale (pre-change) data to the API.
-        const formData = overrideData ?? data
+        // Guard: ignore a React/DOM click-event accidentally passed through
+        // (e.g. `onClick={handleSubmit}`), otherwise `formData` would become the
+        // event object and every required field would look empty.
+        const looksLikeEvent =
+            overrideData != null &&
+            (typeof overrideData === 'function' ||
+                typeof overrideData?.preventDefault === 'function' ||
+                'nativeEvent' in overrideData ||
+                'currentTarget' in overrideData)
+        const formData = !looksLikeEvent && overrideData != null ? overrideData : data
         if (formReadonly) return
 
         // Validate required fields
@@ -627,6 +684,32 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }
 
+    /**
+     * Apply a field patch (e.g. `{ status: 'confirmed' }`, `{ published: true }`)
+     * and save it immediately.
+     *
+     * The next form state is built **explicitly** and passed to `handleSubmit` —
+     * calling `handleSubmit()` after `setData` would send the stale (pre-change)
+     * data to the API. Shared by `stateActions` and `fieldActions`.
+     */
+    const applyFieldPatch = async (patch: Record<string, any>, confirmMessage?: string) => {
+        const nextData = { ...data, ...patch }
+        if (confirmMessage) {
+            setShowUnsavedWarning(true)
+            setPendingUnsavedAction({
+                onDiscard: async () => {
+                    setData(nextData)
+                    setHasChanges(true)
+                    await handleSubmit(nextData)
+                }
+            })
+            return
+        }
+        setData(nextData)
+        setHasChanges(true)
+        await handleSubmit(nextData)
+    }
+
     const navigateTo = (recordId: string | number) => {
         if (hasChanges) {
             setPendingUnsavedAction({
@@ -725,9 +808,14 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
 
         const readonly = formReadonly || resolveCondition(field.readonly, data, condCtx) || Boolean(field.computed)
+        // `disabled` is a separate, isolated state — it must never be inferred
+        // from `readonly`. Only an explicit `disabled` (or the whole form being
+        // readonly, which locks every control) disables the input.
+        const disabled = resolveCondition(field.disabled, data, condCtx)
+        const locked = readonly || disabled
         const value = data[field.key]
         const onChange = (newValue: any) => {
-            if (readonly) return
+            if (locked) return
             setData({...data, [field.key]: newValue})
         }
 
@@ -769,7 +857,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             onChange={onChange}
                             field={field}
                             data={data}
-                            disabled={readonly}
+                            disabled={disabled}
                             readonly={readonly}
                         />
                         {errorMessage && (
@@ -795,7 +883,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             value={value}
                             onChange={onChange}
                             data={data}
-                            disabled={readonly}
+                            disabled={disabled}
                             readonly={readonly}
                         />
                         {errorMessage && (
@@ -814,10 +902,11 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             value={value ?? null}
                             onChange={(val) => onChange(val ?? 0)}
                             placeholder={field.placeholder}
-                            disabled={readonly}
+                            readOnly={readonly}
+                            disabled={disabled}
                             error={hasError}
                             fullWidth
-                            className={readonly ? 'opacity-60 cursor-not-allowed' : ''}
+                            className={disabled ? 'opacity-60 cursor-not-allowed' : ''}
                             min={0}
                             controls={false}
                         />
@@ -837,6 +926,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                         uploadPath={field.uploadPath}
                         label={translate(field.label)}
                         readonly={readonly}
+                        disabled={disabled}
                         error={errorMessage}
                         onRemove={removeFile}
                         onAssetSelected={(asset) => {
@@ -858,7 +948,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <label className="text-sm font-medium">{translate(field.label)}</label>
-                            {!readonly && (
+                            {!locked && (
                                 <Button onClick={() => addArrayItem(field.key)} size="sm" className="gap-2">
                                     <Plus className="w-4 h-4"/>
                                     Add Item
@@ -874,9 +964,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                     variant="outlined"
                                     inputSize="sm"
                                     fullWidth
-                                    disabled={readonly}
+                                    readOnly={readonly}
+                                    disabled={disabled}
                                 />
-                                {!readonly && (
+                                {!locked && (
                                     <Button
                                         onClick={() => removeArrayItem(field.key, index)}
                                         size="sm"
@@ -901,7 +992,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             id={field.key}
                             checked={value || false}
                             onChange={(e) => onChange(e.target.checked)}
-                            disabled={readonly}
+                            disabled={locked}
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <label htmlFor={field.key} className="text-sm font-medium">
@@ -918,8 +1009,9 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 checkedChildren={"ON"}
                                 unCheckedChildren={"OFF"}
-                                disabled={readonly}
-                                onClick={() => !readonly && onChange(!value)}>
+                                readOnly={readonly}
+                                disabled={disabled}
+                                onClick={() => !locked && onChange(!value)}>
                         </Switch>
                     </div>
                 )
@@ -935,6 +1027,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -956,6 +1049,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -976,6 +1070,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'HH:mm:ss',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -997,6 +1092,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'yyyy',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1018,6 +1114,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'yyyy-MM',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1039,6 +1136,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder || 'dd',
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1059,6 +1157,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 size: field.size,
@@ -1080,6 +1179,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 size: field.size,
@@ -1101,6 +1201,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 fetchUrl: field.fetchUrl,
                                 labelKey: field.labelKey,
@@ -1130,6 +1231,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 options: selOptions as any,
                                 fetchUrl: field.fetchUrl,
@@ -1158,6 +1260,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1179,6 +1282,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 placeholder: field.placeholder,
                                 required: field.required,
                                 readonly: readonly,
+                                disabled: disabled,
                                 helper: field.helper,
                                 size: field.size,
                             }}
@@ -1368,24 +1472,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                                 color={"violet"}
                                 appearance={action.variant || 'primary'}
                                 onClick={async () => {
-                                    // Build the next form state explicitly and submit it
-                                    // directly — calling handleSubmit() after setData
-                                    // would send the stale (pre-change) status to the API.
-                                    const nextData = { ...data, status: action.to }
-                                    if (action.confirm) {
-                                        setShowUnsavedWarning(true)
-                                        setPendingUnsavedAction({
-                                            onDiscard: async () => {
-                                                setData(nextData)
-                                                setHasChanges(true)
-                                                await handleSubmit(nextData)
-                                            }
-                                        })
-                                        return
-                                    }
-                                    setData(nextData)
-                                    setHasChanges(true)
-                                    await handleSubmit(nextData)
+                                    await applyFieldPatch({ status: action.to }, action.confirm)
                                 }}
                                 disabled={saving}
                             >
@@ -1394,6 +1481,31 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             </Button>
                         )
                     })}
+                </div>
+            )}
+
+            {/* Field action buttons (Publish / Unpublish, Active / Unactive, …) */}
+            {config.fieldActions && config.fieldActions.length > 0 && mode === 'edit' && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {config.fieldActions
+                        .filter(action => (action.showWhen ? action.showWhen(data) : true))
+                        .map(action => (
+                            <Button
+                                key={`${action.field}-${String(action.value)}`}
+                                size="sm"
+                                color={"violet"}
+                                appearance={action.variant || 'primary'}
+                                onClick={async () => {
+                                    await applyFieldPatch({ [action.field]: action.value }, action.confirm)
+                                }}
+                                className={action.className}
+                                style={action.style}
+                                disabled={saving}
+                            >
+                                {action.icon}
+                                {translate(action.label)}
+                            </Button>
+                        ))}
                 </div>
             )}
 
@@ -1690,7 +1802,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             appearance="primary"
                             color="green"
                             visible={hasChanges && isFormValid()}
-                            onClick={handleSubmit}
+                            onClick={() => handleSubmit()}
                             disabled={saving || !isFormValid()}
                         >
                             <IoMdCloudDone className="w-4 h-4 mr-2"/>

@@ -3,7 +3,7 @@
 Toggle switch for boolean values.
 
 ## Props
-- `config`: FieldConfig — field configuration (uses `label`, `readonly`)
+- `config`: FieldConfig — field configuration (uses `label`, `readonly`, `disabled`)
 - `value`: `boolean` — current toggle state
 - `onChange`: `(value: boolean) => void`
 - `error`: `string | null`

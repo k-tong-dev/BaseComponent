@@ -39,7 +39,8 @@ export function NumberField({ config, value, onChange, error }: FieldProps) {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={handleChange}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           style={{
             borderTop: '0',
             borderRight: '0',

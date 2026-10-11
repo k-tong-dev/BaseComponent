@@ -268,8 +268,8 @@ const renderField = (field: FormField) => {
         onChange={(value) => setData({ ...data, [field.key]: value })}
         field={field}
         data={data}
-        disabled={field.readonly}
-        readonly={field.readonly}
+        disabled={disabled}
+        readonly={readonly}
       />
     )
   }
@@ -278,6 +278,11 @@ const renderField = (field: FormField) => {
   // ...
 }
 ```
+
+> `readonly` and `disabled` are resolved separately in `renderField`
+> (`resolveCondition` on `field.readonly` / `field.disabled`). A widget must render
+> `readonly` as a view-only view of the value and reserve the muted/disabled look
+> for `disabled` — never map `readonly` onto the control's `disabled` attribute.
 
 ## Best Practices
 

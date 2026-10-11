@@ -179,10 +179,15 @@ export const Many2OneWidget: React.FC<FieldWidgetProps> = ({
     // Could emit event or call callback if provided in config
   }
   
-  if (readonly) {
+  // Readonly shows the value as plain text (it is still part of the form and is
+  // submitted); disabled additionally mutes it. `readonly` must never be
+  // rendered as a disabled control.
+  if (readonly || disabled) {
     return (
-      <div className="px-3 py-2 border rounded bg-gray-50">
-        {selectedRecord?.label || <span className="text-gray-400">-</span>}
+      <div className={disabled
+        ? 'px-3 py-2 border rounded bg-gray-50 text-sm text-gray-500 opacity-60 cursor-not-allowed'
+        : 'px-3 py-2 text-sm'}>
+        {selectedRecord?.label || <span className={disabled ? 'text-gray-400' : 'text-muted-foreground'}>-</span>}
       </div>
     )
   }

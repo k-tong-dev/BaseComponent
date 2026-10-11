@@ -149,7 +149,8 @@ export interface FormField {
   label: string
   type: 'number' | 'file' | 'array' | 'json' | 'checkbox' | 'boolean' | 'toggle' | 'date' | 'datetime' | 'time' | 'year' | 'month' | 'day' | 'one2many' | 'many2many' | 'many2one' | 'selection' | 'string' | 'html'
   required?: boolean
-  readonly?: boolean
+  readonly?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
+  disabled?: boolean | string | ((data: any, ctx?: FormConditionContext) => boolean)
   helper?: string
   placeholder?: string
   options?: Array<{ label: string; value: string }>
@@ -201,6 +202,25 @@ export interface FormConfig {
     badge?: string | number
     readonly?: boolean
     helper?: string
+  }>
+  stateActions?: Array<{    // Odoo-style state transition buttons (Draft → Confirmed → …)
+    from: string | string[] // visible only when the current status matches
+    to: string              // new status value
+    label: string
+    icon?: React.ReactNode
+    variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+    confirm?: string        // shows an "unsaved changes" confirm dialog first
+  }>
+  fieldActions?: Array<{    // Buttons that write any field (Publish ↔ Unpublish, …)
+    field: string           // field key to write
+    value: any              // value to write to it
+    label: string
+    icon?: React.ReactNode
+    variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+    showWhen?: (data: any) => boolean   // visibility predicate (mutually exclusive pairs)
+    confirm?: string
+    className?: string      // extra classes for the button
+    style?: React.CSSProperties
   }>
   actions: { /* ... */ }
   breadcrumbs: { /* ... */ }
@@ -424,10 +444,28 @@ export const productFormConfig: FormConfig = {
 ```
 
 **Readonly Features:**
-- Input is disabled and cannot be edited
-- Gray background indicates read-only state
-- Cursor shows "not-allowed" on hover
-- Ideal for auto-generated fields, timestamps, IDs
+- Input cannot be edited (`readOnly`, **not** `disabled`)
+- Keeps its normal look — value stays visible, selectable and copyable
+- The value is still submitted with the record
+- Ideal for auto-generated fields, timestamps, IDs and computed values
+
+> `readonly` and `disabled` are **separate** states. A readonly field must never be
+> rendered as a disabled control.
+
+### Disabled Field
+```typescript
+{
+  key: 'locked_note',
+  label: 'Locked Note',
+  type: 'string',
+  disabled: true
+}
+```
+
+**Disabled Features:**
+- Input is truly disabled: it cannot be focused or edited (`disabled`)
+- Rendered muted (greyed) with a `not-allowed` cursor
+- Use for temporarily unavailable controls, not for “view-only” values
 
 ### Helper Field
 ```typescript
@@ -587,6 +625,29 @@ context), handy for mode-based logic:
   readonly: "status != 'draft'",   // editable only while the order is draft
 }
 ```
+
+`readonly` marks the value as view-only — it still looks like a normal field, can
+be selected and copied, and is submitted with the record. It maps to the control's
+`readOnly`, **never** to `disabled`.
+
+### disabled
+
+`disabled` is a separate, independent state (same boolean / expression / function
+forms as `readonly`):
+
+```typescript
+{
+  key: 'coupon_code',
+  label: 'Coupon Code',
+  type: 'string',
+  disabled: "payment_method != 'coupon'",   // greyed out unless a coupon applies
+}
+```
+
+A disabled field cannot be focused or edited and renders muted. Because it is
+independent, you can combine the two — e.g. `readonly: true` for a computed value
+that still copies nicely, or `disabled: true` for a control that is temporarily
+unavailable. Setting `readonly` must **not** disable the control.
 
 ### default
 
@@ -1239,6 +1300,68 @@ export const productFormConfig: FormConfig = {
 - **Create Mode**: Only shows Cancel/Create buttons
 - **Edit Mode**: Shows full action dropdown (Print, Export, Duplicate, Archive, Delete)
 
+## 🎛️ Header Action Buttons
+
+Two config-driven button rows render above the form **in edit mode only**. Both build the
+next form state explicitly and save it through the normal form save flow — they never
+rely on a `setTimeout(handleSubmit)` closure, which would POST the stale (pre-change) data.
+
+### `stateActions` — status transitions
+
+Each button appears only while the record's `status` matches `from`, and writes `to`:
+
+```typescript
+stateActions: [
+  { from: 'draft', to: 'confirmed', label: 'Confirm', variant: 'primary' },
+  { from: 'paid', to: 'done', label: 'Mark Done', variant: 'default' },
+  { from: ['draft', 'confirmed'], to: 'cancelled', label: 'Cancel Order',
+    variant: 'default', confirm: 'Are you sure you want to cancel this order?' },
+]
+```
+
+### `fieldActions` — toggle any field
+
+Same mechanics, but for an arbitrary field/value. `showWhen` controls visibility, which is
+how you build **mutually exclusive pairs** — exactly one of the pair is ever on screen:
+
+```typescript
+import { createElement } from 'react'
+import { Globe, GlobeLock } from 'lucide-react'
+
+fieldActions: [
+  { field: 'published', value: true,  label: 'Publish',
+    icon: createElement(Globe, { size: 14 }) },
+  { field: 'published', value: false, label: 'Unpublish',
+    icon: createElement(GlobeLock, { size: 14 }),
+    showWhen: (data) => Boolean(data.published) },
+]
+```
+
+With the `showWhen` predicates above, **Publish** only shows while `published` is falsy and
+**Unpublish** only shows while it is truthy — so both button act on the same field and one
+shows must one hide.
+
+Styling: `className` and `style` are passed straight through to the underlying rsuite
+`Button`, so you can restyle or position an individual action.
+
+| Property | Purpose |
+|---|---|
+| `field` / `value` | the field the button writes |
+| `label` | button text (translated) |
+| `icon` | any `React.ReactNode`, typically `createElement(Icon, { size: 14 })` |
+| `variant` | `default \| primary \| link \| subtle \| ghost` |
+| `showWhen` | visibility predicate over the current form data |
+| `confirm` | shows the unsaved-changes confirm dialog before saving |
+| `className` / `style` | extra button styling |
+
+### When to use `fieldActions` vs ServerActions
+
+- **`fieldActions`** — the action's whole job is to change one field on the record being
+  edited and save. Keep it inline next to the form.
+- **ServerActions** (see [ServerActions README](../Actions/README.md)) — anything that
+  calls an endpoint, has confirm flows, or should live in the Actions dropdown. This is
+  where heavier per-record actions belong; it also gives you bulk-mode behaviour for free.
+
 ### Change Tracking
 - Automatically detects form changes
 - Shows/hides action bar based on modifications
@@ -1248,6 +1371,35 @@ export const productFormConfig: FormConfig = {
 - Automatic breadcrumb generation
 - Entity-aware navigation paths
 - Consistent across all forms
+
+## 🔄 Refresh — a data refresh, not a page reload
+
+`FormView` deliberately has **no refresh button** in its toolbar (the toolbar only appears on
+ListView / KanbanView / GanttView, where a **Refresh data** button re-fetches the record set —
+see the [Views README](../README.md)).
+
+When something does ask the form to refresh, it performs a **data refresh**: `handleFormRefresh`
+does a `GET` on `${apiEndpoint}/${entityId}` and applies the result to the form state.
+
+| Step | Behaviour |
+|---|---|
+| Request | `GET ${apiEndpoint}/${id}` — the record API, never `router.refresh()` / `location.reload()` |
+| Form data | Replaced with the stored record; unsaved edits are dropped |
+| File fields | Widgets restored from the record's `file` fields (shared `filesFromRecord` helper) |
+| Dirty state | `hasChanges` reset to `false` |
+| Record deleted | `404` → navigate back to the list view |
+| Parent list | `onRefresh?.()` also fires so the list stays in sync |
+
+Reach it from a server action via `context.refresh?.()`:
+
+```tsx
+{
+  key: 'reload_record',
+  label: 'Reload record',
+  mode: 'edit',
+  onClick: (_data, context) => context?.refresh?.(),
+}
+```
 
 ## 🛠️ Configuration Options
 

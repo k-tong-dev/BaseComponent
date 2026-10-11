@@ -30,7 +30,7 @@ const defaultActions = getDefaultServerActions(
 | Export | `export_excel` | Triggers Export modal |
 | Delete | `delete` | `DELETE {apiEndpoint}/{id}` |
 | Duplicate | `duplicate` | `POST {apiEndpoint}` (strips `id`/timestamps) |
-| Copy JSON | `copy_json` | `navigator.clipboard.writeText()` |
+| Copy JSON | `copy_json` | `copyText()` — async Clipboard API with a hidden-textarea + `execCommand('copy')` fallback |
 | Archive | `archive` | `PUT {apiEndpoint}/{id} { active: false }` |
 | Unarchive | `unarchive` | `PUT {apiEndpoint}/{id} { active: true }` |
 

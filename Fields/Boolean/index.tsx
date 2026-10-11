@@ -13,7 +13,8 @@ export function BooleanField({ config, value, onChange, error }: FieldProps) {
         <Toggle
           checked={value || false}
           onChange={(checked) => onChange(checked)}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           checkedChildren="ON"
           unCheckedChildren="OFF"
         />

@@ -682,6 +682,7 @@ export const Many2ManyWidget: React.FC<FieldWidgetProps> = ({
           placeholder: config.allowCreate ? 'Type to create or select...' : 'Select...',
           fetchUrl: config.relation,
           readonly,
+          disabled,
           size: 'md',
         }}
         value={fieldValue}
@@ -690,11 +691,12 @@ export const Many2ManyWidget: React.FC<FieldWidgetProps> = ({
     )
   }
 
-  // List mode (default)
+  // List mode (default). Readonly hides every edit affordance but keeps the
+  // normal look; disabled additionally mutes the control.
   if (readonly || disabled) {
     return (
-      <div className="border rounded p-4 bg-gray-50">
-        <p className="text-xs text-gray-500">
+      <div className={disabled ? "border rounded p-4 bg-gray-50 opacity-60" : "border rounded p-4"}>
+        <p className={disabled ? "text-xs text-gray-500" : "text-xs text-muted-foreground"}>
           {items.filter((i) => !i._toDelete).length} linked records (read-only)
         </p>
       </div>

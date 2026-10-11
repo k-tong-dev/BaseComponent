@@ -16,7 +16,7 @@ import {ViewContextProvider, parseContextFromSearchParams} from './Context'
 import { List, Grid3x3, Calendar, Info } from 'lucide-react'
 import {ResourceViewProps, ResourceType} from './types'
 import {MdAdd} from "react-icons/md";
-import {ServerActions} from '../Actions'
+import { ServerActions, getDefaultServerActions } from '../Actions'
 import {Tooltip, TooltipTrigger, TooltipContent} from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/use-auth'
 import { useViewToolbar } from '@/components/Base/ViewToolbar/hooks/useViewToolbar'
@@ -64,7 +64,6 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
         let actions = config.serverActions || []
 
         if (config.enableDefaultActions !== false && config.defaultActions) {
-            const {getDefaultServerActions} = require('../Actions')
             const defaultActions = getDefaultServerActions(config.defaultActions, config.formViewConfig?.apiEndpoint)
             actions = [...defaultActions, ...actions]
         }
@@ -289,6 +288,8 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
                         toolbar={toolbar}
                         columns={config.listViewConfig?.columns}
                         currentViewType={viewType}
+                        onRefresh={onRefresh}
+                        refreshing={loading}
                     >
                         {selectedIds.length > 0 && (
                             <ServerActions

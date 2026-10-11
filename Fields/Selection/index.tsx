@@ -92,7 +92,8 @@ export function SelectionField({config, value, onChange, error}: FieldProps) {
         searchable: config.searchable !== false,
         loading,
         placeholder: config.placeholder || ' ',
-        disabled: config.readonly,
+        readOnly: config.readonly,
+        disabled: config.disabled,
         style: PICKER_STYLE,
         onOpen: () => setOpen(true),
         onClose: () => setOpen(false)

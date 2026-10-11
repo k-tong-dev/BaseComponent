@@ -349,8 +349,30 @@ interface ResourceViewProps {
   onCreate?: () => void
   onDelete?: (rowData: any) => void
   loading?: boolean
+  /** Powers the **Refresh data** button on List / Kanban / Gantt views. */
+  onRefresh?: () => void
 }
 ```
+
+### ViewToolbarProps
+
+The toolbar rendered in the ResourceView header for List / Kanban / Gantt views.
+
+```typescript
+interface ViewToolbarProps {
+  toolbar: UseViewToolbarReturn           // search/filter/group + view presets state
+  columns?: ColumnField[]                 // drives search, filter and group-by fields
+  currentViewType?: string                // for presets
+  /** Shows the **Refresh data** button; call the page-level refresh here. */
+  onRefresh?: () => void | Promise<void>
+  /** Spins the button icon while a refresh is in flight (pass `loading`). */
+  refreshing?: boolean
+  children?: React.ReactNode              // extra actions (e.g. bulk actions, New)
+}
+```
+
+**Note:** the header (and therefore the toolbar + refresh button) is not rendered at all when
+`viewType` is `form` or `custom` — `FormView` never gets a refresh button.
 
 ## Workflow
 
@@ -557,6 +579,46 @@ The view switcher is a segmented control with an animated sliding pill indicator
 - Positions the pill via `useEffect` measuring button ref offsets
 - Only shows view types that have their config provided (e.g., if `kanbanViewConfig` is missing, the Kanban button is hidden)
 
+## Data Refresh
+
+A **Refresh data** button lives in the `ViewToolbar` (next to Group By and the view-presets dropdown) for every **ListView, KanbanView and GanttView** — none of them ever reload the page.
+
+- It re-fetches the record set through the page-level `onRefresh` handler (e.g. `useResource(endpoint).refresh`), so search/filter/sort/group state is preserved.
+- The icon spins while the request is in flight: pass `refreshing={loading}` from `useResource`.
+- It renders **only** when `onRefresh` is provided, so views without a data source simply show no button.
+
+```tsx
+// app/dashboard/orders/page.tsx
+const { data, loading, refresh } = useResource<any[]>('/api/dashboard/orders')
+
+<ResourceView
+  config={{ type: 'list', listViewConfig: ordersConfig.listViewConfig(data ?? []), ... }}
+  loading={loading}
+  onRefresh={refresh}     {/* ← powers the Refresh data button */}
+  ...
+/>
+```
+
+### Refresh is a data refresh, never a page reload
+
+`FormView` has **no** refresh button in its toolbar. Its internal refresh (`handleFormRefresh`, also what `context.refresh()` calls from server actions) does a **`GET` on the record API** and merges the result back into the form:
+
+- replaces the current form data (unsaved edits are dropped in favour of the stored record)
+- restores the `file`/`file` field widgets from the returned record
+- clears the dirty state
+- navigates back to the list when the record is gone (`404`)
+- also calls the page-level `onRefresh` so the list stays in sync
+
+```tsx
+// Reaching FormView refresh from a server action
+{
+  key: 'reload',
+  label: 'Reload record',
+  mode: 'edit',
+  onClick: (_data, ctx) => ctx?.refresh?.(),   // ← data refresh, not router.refresh()
+}
+```
+
 ## ModuleNavBar
 
 The `ModuleNavBar` is a sticky horizontal navigation strip rendered below `AdminTopNavbar` in the admin layout. It provides context-sensitive navigation based on the current sidebar section.
@@ -573,7 +635,7 @@ The `ModuleNavBar` is a sticky horizontal navigation strip rendered below `Admin
 | System | `/admin/settings*`, `/admin/configurations*` | Settings, Config. |
 
 ### Dropdown Groups
-Some sections render dropdown groups (e.g., Catalog > Products and Configuration) using `@/components/ui/dropdown-menu` (Radix UI). These use portals to escape parent overflow clipping and support keyboard navigation.
+Some sections render dropdown groups (e.g., Catalog > Products and Configuration) using `@/components/ui/dropdown` (RSuite `Dropdown`). RSuite handles portalling and keyboard navigation for these menus.
 
 ### Location
 `components/admin/module-navbar.tsx` — imported in `app/admin/layout.tsx`.

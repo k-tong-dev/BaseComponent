@@ -35,6 +35,9 @@ interface StatusOption {
 
 export const StatusBarWidget: React.FC<any> = ({ value, onChange, field, readonly, disabled }: any) => {
   const translate = useTranslate()
+  // Readonly blocks state transitions (the form drives the status through its
+  // state-action buttons) but keeps the normal look. Disabled additionally
+  // mutes the control.
   const isReadonly = Boolean(readonly || disabled)
 
   const options: StatusOption[] = Array.isArray(field?.options) ? field.options : []
@@ -67,7 +70,7 @@ export const StatusBarWidget: React.FC<any> = ({ value, onChange, field, readonl
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
+    <div className={cn('flex flex-wrap items-center gap-2.5', disabled && 'pointer-events-none opacity-50')}>
       {/* ── Stages track ─────────────────────────────────────────────── */}
       <div className="inline-flex items-center rounded-xl border border-border bg-muted/40 p-1 shadow-sm">
         {ordered.map((opt, i) => {

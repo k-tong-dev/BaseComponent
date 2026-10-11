@@ -30,7 +30,8 @@ export function YearField({ config, value, onChange, error }: FieldProps) {
           editable={false}
           preventOverflow
           placement={"auto"}
-          disabled={config.readonly}
+          readOnly={config.readonly}
+          disabled={config.disabled}
           className={cn(
             'w-full bg-transparent border-b-1 border-b-foreground text-foreground rounded-none disabled:cursor-not-allowed disabled:opacity-50',
             error ? 'border-destructive' : 'border-border',

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Upload, X, File as FileIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AssetPickerModal } from '@/components/Base/Asset/AssetPickerModal'
 import type { StorageFile } from '@/components/Base/Asset/types'
+import { cn } from '@/lib/utils'
 
 export type UploadedFile = StorageFile & { file?: File }
 
@@ -13,6 +14,12 @@ export interface FileFieldProps {
   uploadText?: string
   label?: string
   readonly?: boolean
+  /**
+   * Disabled is a separate, isolated state from `readonly`: a readonly field
+   * hides the upload/remove affordances but keeps its normal look, while a
+   * disabled field is additionally rendered muted.
+   */
+  disabled?: boolean
   error?: string | null
   /** Accepted MIME types for the device picker (default: images). */
   accept?: string
@@ -121,6 +128,7 @@ export function FileField({
   uploadText,
   label,
   readonly,
+  disabled,
   error,
   accept,
   uploadPath,
@@ -129,6 +137,10 @@ export function FileField({
 }: FileFieldProps) {
   const [enteringIndex, setEnteringIndex] = useState<number | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  // readonly and disabled both remove the edit affordances; only `disabled`
+  // additionally mutes the whole control.
+  const locked = Boolean(readonly) || Boolean(disabled)
 
   const isSingle = maxFiles === 1
   const displayFiles = files.filter(f => f.url)
@@ -148,8 +160,8 @@ export function FileField({
   return (
     <>
       <style>{animationsStyle}</style>
-      <div className="space-y-2">
-        {!readonly && canPick && (
+      <div className={cn('space-y-2', disabled && 'opacity-60')}>
+        {!locked && canPick && (
           <button
             onClick={() => setPickerOpen(true)}
             type="button"
@@ -179,7 +191,7 @@ export function FileField({
                 index={0}
                 isSingle
                 entering={enteringIndex === 0}
-                readonly={readonly}
+                readonly={locked}
                 onRemove={onRemove}
               />
             </div>
@@ -189,7 +201,7 @@ export function FileField({
                 files={displayFiles}
                 isSingle={false}
                 enteringIndex={enteringIndex}
-                readonly={readonly}
+                readonly={locked}
                 onRemove={onRemove}
               />
             </div>
