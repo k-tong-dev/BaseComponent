@@ -1330,6 +1330,35 @@ Styling: `className` and `style` are passed straight through to the underlying r
 - Entity-aware navigation paths
 - Consistent across all forms
 
+## 🔄 Refresh — a data refresh, not a page reload
+
+`FormView` deliberately has **no refresh button** in its toolbar (the toolbar only appears on
+ListView / KanbanView / GanttView, where a **Refresh data** button re-fetches the record set —
+see the [Views README](../README.md)).
+
+When something does ask the form to refresh, it performs a **data refresh**: `handleFormRefresh`
+does a `GET` on `${apiEndpoint}/${entityId}` and applies the result to the form state.
+
+| Step | Behaviour |
+|---|---|
+| Request | `GET ${apiEndpoint}/${id}` — the record API, never `router.refresh()` / `location.reload()` |
+| Form data | Replaced with the stored record; unsaved edits are dropped |
+| File fields | Widgets restored from the record's `file` fields (shared `filesFromRecord` helper) |
+| Dirty state | `hasChanges` reset to `false` |
+| Record deleted | `404` → navigate back to the list view |
+| Parent list | `onRefresh?.()` also fires so the list stays in sync |
+
+Reach it from a server action via `context.refresh?.()`:
+
+```tsx
+{
+  key: 'reload_record',
+  label: 'Reload record',
+  mode: 'edit',
+  onClick: (_data, context) => context?.refresh?.(),
+}
+```
+
 ## 🛠️ Configuration Options
 
 ### Form Actions

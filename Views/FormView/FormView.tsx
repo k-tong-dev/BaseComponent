@@ -241,6 +241,23 @@ export type MutableEntity = {
     [key: string]: any
 }
 
+/**
+ * Collect the stored file objects from a record's `file` fields.
+ *
+ * Shared by the form's initial data effect and by the refresh handler so both
+ * paths restore the file widgets identically.
+ */
+function filesFromRecord(config: FormConfig, record: any): StorageFile[] {
+    return (config.fields || [])
+        .filter(f => f.type === 'file')
+        .flatMap(f => {
+            const val = record?.[f.key]
+            if (!val) return []
+            return Array.isArray(val) ? val : [val]
+        })
+        .filter((v: any): v is StorageFile => Boolean(v) && typeof v.id === 'string' && typeof v.url === 'string')
+}
+
 interface FormViewProps<T extends Entity> {
     mode: 'create' | 'edit'
     config: FormConfig
@@ -310,7 +327,10 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
         }
     }, [mode, entityId, recordIds, internalRecordIds, config.apiEndpoint])
 
-    // Central refresh handler — re-fetches current record and updates form state
+    // Central refresh handler — re-fetches the current record and updates the
+    // form state with it. This is a *data* refresh: it re-reads the record from
+    // the API (never reloads the page), so unsaved edits are replaced by what
+    // is stored on the server and file fields are restored too.
     const handleFormRefresh = useCallback(async () => {
         if (!entityId) return
         try {
@@ -319,6 +339,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                 const record = await res.json()
                 setData(record)
                 setOriginalData(record)
+                setUploadedFiles(filesFromRecord(config, record))
                 setHasChanges(false)
             } else if (res.status === 404) {
                 // Record was deleted — navigate to list
@@ -357,15 +378,7 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             setData(completeData as MutableEntity)
             setOriginalData(completeData as MutableEntity)
             // Initialize uploadedFiles from JSON stored in file fields
-            const fileFieldValues = config.fields
-                .filter(f => f.type === 'file')
-                .flatMap(f => {
-                    const val = initialData[f.key]
-                    if (!val) return []
-                    if (Array.isArray(val)) return val
-                    return [val]
-                })
-            const validFiles = fileFieldValues.filter((v): v is StorageFile => v && typeof v.id === 'string' && typeof v.url === 'string')
+            const validFiles = filesFromRecord(config, initialData)
             console.log('[FileInit] JSON files from initialData:', validFiles)
             setUploadedFiles(validFiles)
             setLoading(false)
