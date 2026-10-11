@@ -77,10 +77,19 @@ export function clearDebug(): void {
 const isElement = (v: any): boolean =>
   v && typeof v === 'object' && typeof v.$$typeof === 'symbol'
 
+/** Max array/Set items rendered before the rest are collapsed to a summary. */
+export const PREVIEW_MAX_ITEMS = 100
+/** Max own-keys rendered on a single object/Map before the rest are summarised. */
+export const PREVIEW_MAX_KEYS = 200
+
 /**
  * Turn any value into something `JSON.stringify` can render: functions become
  * `ƒ name()`, React elements a short tag, Dates ISO strings, Maps/Sets become
  * plain structures, and true cycles become `[Circular]`.
+ *
+ * Large collections are truncated — the first `PREVIEW_MAX_ITEMS` array/Set items
+ * (or `PREVIEW_MAX_KEYS` object/Map keys) followed by a "… N more" marker — so the
+ * panel stays cheap to render even on pages with big datasets.
  */
 export function toPreview(value: any, maxDepth = 6): any {
   const path = new WeakSet<object>()
@@ -97,23 +106,34 @@ export function toPreview(value: any, maxDepth = 6): any {
       return `[ReactElement <${type}>]`
     }
     if (v instanceof Date) return v.toISOString()
-    if (v instanceof Map) {
-      const out: Record<string, any> = {}
-      v.forEach((val, key) => {
-        out[String(key)] = walk(val, depth + 1)
-      })
-      return out
-    }
-    if (v instanceof Set) return Array.from(v.values()).map((x) => walk(x, depth + 1))
 
     path.add(v)
     let out: any
-    if (Array.isArray(v)) {
-      out = v.map((x) => walk(x, depth + 1))
-    } else {
+
+    if (v instanceof Map) {
+      const entries = Array.from(v.entries())
+      const limit = Math.min(entries.length, PREVIEW_MAX_KEYS)
       out = {}
-      for (const key of Object.keys(v)) out[key] = walk(v[key], depth + 1)
+      for (let i = 0; i < limit; i++) out[String(entries[i][0])] = walk(entries[i][1], depth + 1)
+      if (entries.length > limit) out.__truncated__ = `${entries.length - limit} more keys`
+    } else if (v instanceof Set) {
+      const values = Array.from(v.values())
+      const limit = Math.min(values.length, PREVIEW_MAX_ITEMS)
+      out = values.slice(0, limit).map((x) => walk(x, depth + 1))
+      if (values.length > limit) out.push(`… ${values.length - limit} more items`)
+    } else if (Array.isArray(v)) {
+      const limit = Math.min(v.length, PREVIEW_MAX_ITEMS)
+      out = []
+      for (let i = 0; i < limit; i++) out.push(walk(v[i], depth + 1))
+      if (v.length > limit) out.push(`… ${v.length - limit} more items`)
+    } else {
+      const keys = Object.keys(v)
+      const limit = Math.min(keys.length, PREVIEW_MAX_KEYS)
+      out = {}
+      for (let i = 0; i < limit; i++) out[keys[i]] = walk(v[keys[i]], depth + 1)
+      if (keys.length > limit) out.__truncated__ = `${keys.length - limit} more keys`
     }
+
     path.delete(v)
     return out
   }
