@@ -193,6 +193,25 @@ export interface FormConfig {
         confirm?: string
     }>
     /**
+     * Field action buttons (e.g. "Publish to Website" / "Unpublish to Website",
+     * "Active" / "Unactive"). Each button writes `value` to `field` and saves.
+     *
+     * `showWhen` decides visibility — used to make a pair of buttons mutually
+     * exclusive (only one is visible at a time).
+     */
+    fieldActions?: Array<{
+        /** Field key this button writes to. */
+        field: string
+        /** Value written to that field. */
+        value: any
+        label: string
+        icon?: React.ReactNode
+        variant?: 'default' | 'primary' | 'link' | 'subtle' | 'ghost'
+        /** Only render the button when this returns true. */
+        showWhen?: (data: any) => boolean
+        confirm?: string
+    }>
+    /**
      * Odoo-style view context: a key-value dict that views and actions can read.
      * Can be set from URL params, props, or programmatically. Used for defaults,
      * visibility rules, and passing data between views.
@@ -1403,6 +1422,44 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
                             </Button>
                         )
                     })}
+                </div>
+            )}
+
+            {/* Field action buttons (Publish / Unpublish, Active / Unactive, …) */}
+            {config.fieldActions && config.fieldActions.length > 0 && mode === 'edit' && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {config.fieldActions
+                        .filter(action => (action.showWhen ? action.showWhen(data) : true))
+                        .map(action => (
+                            <Button
+                                key={`${action.field}-${String(action.value)}`}
+                                size="sm"
+                                color={"violet"}
+                                appearance={action.variant || 'primary'}
+                                onClick={async () => {
+                                    // Submit the new value directly (see stateActions above).
+                                    const nextData = { ...data, [action.field]: action.value }
+                                    if (action.confirm) {
+                                        setShowUnsavedWarning(true)
+                                        setPendingUnsavedAction({
+                                            onDiscard: async () => {
+                                                setData(nextData)
+                                                setHasChanges(true)
+                                                await handleSubmit(nextData)
+                                            }
+                                        })
+                                        return
+                                    }
+                                    setData(nextData)
+                                    setHasChanges(true)
+                                    await handleSubmit(nextData)
+                                }}
+                                disabled={saving}
+                            >
+                                {action.icon}
+                                {translate(action.label)}
+                            </Button>
+                        ))}
                 </div>
             )}
 
