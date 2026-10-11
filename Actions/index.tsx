@@ -8,6 +8,7 @@ import {createElement} from 'react'
 import {Export} from '../Export'
 import {ExportConfig} from '@/components/Base/Export/types'
 import { showToast } from '@/components/ui/notification'
+import { copyText } from '../clipboard'
 
 // Built-in default ServerActions - generic utility that can be used by any resource
 export const getDefaultServerActions = (flags: {
@@ -144,8 +145,12 @@ export const getDefaultServerActions = (flags: {
             onClick: async (data, context) => {
                 const record = context?.record || data[0]
                 const json = JSON.stringify(record, null, 2)
-                navigator.clipboard.writeText(json)
-                console.log('Copied to clipboard')
+                const copied = await copyText(json)
+                if (copied) {
+                    showToast('success', 'Copied', 'Record JSON copied to the clipboard')
+                } else {
+                    showToast('error', 'Copy failed', 'The browser blocked the copy — check clipboard permissions')
+                }
             }
         })
     }
