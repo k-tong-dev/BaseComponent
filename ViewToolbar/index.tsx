@@ -104,7 +104,7 @@ export function ViewToolbar({ toolbar, columns = [], currentViewType = 'list', o
                      trigger="hover"
                      speaker={<Tooltip>{translate('Refresh data')}</Tooltip>}>
             <Button
-                type="button"
+                appearance="subtle"
                 aria-label={translate('Refresh data')}
                 onClick={() => { void onRefresh() }}
                 disabled={refreshing}

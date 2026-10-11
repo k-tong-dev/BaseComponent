@@ -70,18 +70,46 @@ export const getDefaultServerActions = (flags: {
                 const endpoint = apiEndpoint || context?.apiEndpoint
                 if (!endpoint) {
                     console.error('[Delete action] No apiEndpoint available')
+                    showToast('error', 'Delete failed', 'No API endpoint is configured for this record.')
                     return
                 }
+
+                // Read the server's error message (e.g. a delete-guard: "linked to…").
+                const readError = async (res: Response, fallback: string) => {
+                    const body = await res.json().catch(() => ({}))
+                    return (body && (body.error || body.message)) || fallback
+                }
+
                 if (context?.mode === 'bulk') {
-                    const ids = context?.selectedIds || data.map(d => d.id)
-                    const results = await Promise.allSettled(
-                        ids.map(id => fetch(`${endpoint}/${id}`, { method: 'DELETE' }))
-                    )
-                    const failed = results.filter(r => r.status === 'rejected')
-                    if (failed.length > 0) {
-                        showToast('error', 'Delete failed', `${failed.length} record(s) could not be deleted`)
-                    } else {
+                    const ids = (context?.selectedIds && context.selectedIds.length)
+                        ? context.selectedIds
+                        : data.map(d => d.id)
+                    if (!ids.length) return
+
+                    // Await each response object (not just network rejection) — a
+                    // DELETE guarded by a 409/404 must NOT be counted as success.
+                    const failures: Array<{ id: any; error: string }> = []
+                    await Promise.all(ids.map(async (id) => {
+                        try {
+                            const res = await fetch(`${endpoint}/${id}`, { method: 'DELETE' })
+                            if (!res.ok) {
+                                const body = await res.json().catch(() => ({}))
+                                failures.push({ id, error: (body && body.error) || `HTTP ${res.status}` })
+                            }
+                        } catch (e) {
+                            failures.push({ id, error: e instanceof Error ? e.message : 'Request failed' })
+                        }
+                    }))
+                    const failedCount = failures.length
+                    const firstError = failures[0]?.error || 'Request failed'
+
+                    if (failedCount === 0) {
                         showToast('success', 'Deleted', `${ids.length} record(s) deleted successfully`)
+                        context?.refresh?.()
+                    } else if (failedCount === ids.length) {
+                        showToast('error', 'Delete failed', firstError)
+                    } else {
+                        showToast('warning', 'Partial delete', `${ids.length - failedCount} deleted, ${failedCount} failed — ${firstError}`)
                         context?.refresh?.()
                     }
                 } else {
@@ -92,7 +120,7 @@ export const getDefaultServerActions = (flags: {
                         showToast('success', 'Deleted', 'Record deleted successfully')
                         context?.refresh?.()
                     } else {
-                        showToast('error', 'Delete failed', 'Failed to delete record')
+                        showToast('error', 'Cannot delete', await readError(res, 'Failed to delete record'))
                     }
                 }
             }
