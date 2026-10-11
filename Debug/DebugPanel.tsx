@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bug, Check, Copy, RefreshCw, Trash2, X } from 'lucide-react'
+import { Bug, Check, Copy, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { useDebug } from './DebugProvider'
 import { clearDebug, getDebugSnapshot, subscribeDebug } from './registry'
 
@@ -14,7 +14,7 @@ interface DebugTab {
 }
 
 /** Sections read live from the browser instead of the debug registry. */
-const BROWSER_KEYS = ['cookies', 'localStorage', 'sessionStorage'] as const
+const BROWSER_KEYS = ['cookies', 'localStorage', 'sessionStorage', 'performance'] as const
 
 const TABS: DebugTab[] = [
   { key: 'context', label: 'Context', sections: ['view-context', 'view-state'] },
@@ -34,6 +34,7 @@ const SECTION_LABELS: Record<string, string> = {
   cookies: 'Cookies',
   localStorage: 'Local Storage',
   sessionStorage: 'Session Storage',
+  performance: 'Performance',
 }
 
 /** Clipboard write that cannot throw — falls back to a hidden textarea. */
@@ -117,6 +118,7 @@ interface BrowserSnapshot {
   cookies: Record<string, string>
   localStorage: Record<string, string>
   sessionStorage: Record<string, string>
+  performance: PerformanceSnapshot
 }
 
 function readBrowserSnapshot(): BrowserSnapshot {
@@ -124,7 +126,47 @@ function readBrowserSnapshot(): BrowserSnapshot {
     cookies: readCookies(),
     localStorage: readStorage(() => window.localStorage),
     sessionStorage: readStorage(() => window.sessionStorage),
+    performance: readPerformanceSnapshot(),
   }
+}
+
+interface PerformanceSnapshot {
+  memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number }
+  navigationTiming?: Record<string, number>
+  paintTiming?: Array<{ name: string; startTime: number }>
+  now: number
+}
+
+function readPerformanceSnapshot(): PerformanceSnapshot {
+  const out: PerformanceSnapshot = { now: Date.now() }
+  // JS heap (Chrome/Edge only)
+  const mem = (performance as any).memory
+  if (mem && typeof mem.usedJSHeapSize === 'number') {
+    out.memory = {
+      usedJSHeapSize: mem.usedJSHeapSize,
+      totalJSHeapSize: mem.totalJSHeapSize,
+      jsHeapSizeLimit: mem.jsHeapSizeLimit,
+    }
+  }
+  // Navigation timing
+  const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  if (nav) {
+    out.navigationTiming = {
+      domContentLoaded: nav.domContentLoadedEventEnd - nav.fetchStart,
+      loadComplete: nav.loadEventEnd - nav.fetchStart,
+      dns: nav.domainLookupEnd - nav.domainLookupStart,
+      tcp: nav.connectEnd - nav.connectStart,
+      ttfb: nav.responseStart - nav.requestStart,
+      download: nav.responseEnd - nav.responseStart,
+      domInteractive: nav.domInteractive - nav.fetchStart,
+    }
+  }
+  // Paint timing (first-paint, first-contentful-paint)
+  const paint = performance.getEntriesByType('paint')
+  if (paint.length) {
+    out.paintTiming = paint.map((p) => ({ name: p.name, startTime: p.startTime }))
+  }
+  return out
 }
 
 function Section({ section, preview, note }: SectionData) {
@@ -341,7 +383,10 @@ export function DebugPanel() {
     cookies: {},
     localStorage: {},
     sessionStorage: {},
+    performance: { now: Date.now() },
   })
+  const [refreshing, setRefreshing] = useState(false)
+  const [search, setSearch] = useState('')
   const pathname = usePathname()
 
   const tab = useMemo(() => TABS.find((t) => t.key === activeTab) || TABS[0], [activeTab])
@@ -354,7 +399,12 @@ export function DebugPanel() {
   )
 
   const refreshBrowser = useCallback(() => {
-    setBrowser(readBrowserSnapshot())
+    setRefreshing(true)
+    // A tiny delay so the spinner is visible on fast updates
+    window.setTimeout(() => {
+      setBrowser(readBrowserSnapshot())
+      setRefreshing(false)
+    }, 60)
   }, [])
 
   // (Re)read cookies & storage when the panel opens or a tab that shows them is selected.
@@ -373,9 +423,25 @@ export function DebugPanel() {
       })
       out.push({ section: 'localStorage', preview: browser.localStorage })
       out.push({ section: 'sessionStorage', preview: browser.sessionStorage })
+      out.push({
+        section: 'performance',
+        preview: browser.performance,
+        note: browser.performance?.memory
+          ? 'JS heap from `performance.memory` (Chrome/Edge only).'
+          : 'JS heap unavailable in this browser.',
+      })
+    }
+    // Client-side search filter across section title and JSON body
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      return out.filter(
+        (s) =>
+          (SECTION_LABELS[s.section] || s.section).toLowerCase().includes(q) ||
+          JSON.stringify(s.preview).toLowerCase().includes(q),
+      )
     }
     return out
-  }, [entries, tab, showBrowser, browser])
+  }, [entries, tab, showBrowser, browser, search])
 
   if (!available) return null
 
@@ -400,13 +466,26 @@ export function DebugPanel() {
             <button
               type="button"
               onClick={refreshBrowser}
+              disabled={refreshing}
               title="Refresh cookies & storage"
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-50 disabled:cursor-wait"
             >
-              <RefreshCw size={13} />
+              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              const all = visible.map((s) => ({ section: s.section, preview: s.preview, note: s.note }))
+              copyText(JSON.stringify(all, null, 2))
+            }}
+            title="Copy all visible sections as JSON"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Copy size={13} />
+            Copy All
+          </button>
           <button
             type="button"
             onClick={clearDebug}
@@ -430,6 +509,28 @@ export function DebugPanel() {
       <div className="border-b border-slate-700 bg-slate-900/60 px-3 py-1.5 text-[11px] text-slate-400">
         <span className="font-mono text-slate-300">{pathname}</span>
         <span className="font-mono">{query}</span>
+      </div>
+      <div className="border-b border-slate-700 bg-slate-900/60 px-2 py-1">
+        <label className="flex items-center gap-1.5">
+          <Search size={12} className="text-slate-500" />
+          <input
+            type="search"
+            placeholder="Filter sections / JSON…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="text-slate-400 hover:text-slate-200"
+              title="Clear filter"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </label>
       </div>
 
       <nav className="flex gap-1 border-b border-slate-700 bg-slate-900 px-2 py-1">
