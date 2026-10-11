@@ -69,6 +69,7 @@ export function useResource<T = any>(
 
   // Publish fetch state to the Base DebugPanel (no-op unless debug mode is on).
   useDebugValue('data', {
+    kind: 'list',
     endpoint,
     loading: state.loading,
     error: state.error,

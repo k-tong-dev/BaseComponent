@@ -50,6 +50,7 @@ import { TagSelectWidget } from '@/components/Base/Fields/Widgets/TagSelectWidge
 import { One2ManyListWidget } from '../../Fields/Widgets/One2ManyListWidget'
 import { StatusBarWidget } from '../../Fields/Widgets/StatusBarWidget'
 import { useTranslate } from '../../i18n'
+import { useDebugValue } from '../../Debug'
 import { resolveCondition, type FormConditionContext } from './domain'
 import {Switch} from "@/components/ui/switch";
 import { showWizardWarning, showWizardError, Wizard } from '../../Wizard'
@@ -368,6 +369,20 @@ function FormViewContent<T extends Entity>({mode, config, initialData, entityId,
             refresh: handleFormRefresh,
         }))
     }, [data, handleFormRefresh])
+
+    // Publish the form's working state to the Base DebugPanel (no-op unless debug
+    // mode is on). `data` is the section the panel's Data tab shows for the current
+    // view: list views publish it from `useResource`, form views publish it here.
+    useDebugValue('data', {
+        kind: 'form',
+        mode,
+        entityId: entityId ?? null,
+        loading,
+        saving,
+        hasChanges,
+        data,
+        originalData,
+    })
 
     useEffect(() => {
         setMounted(true)
