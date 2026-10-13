@@ -7,6 +7,7 @@ import {KanbanView} from './KanbanView'
 import {GanttView} from './GanttView'
 import {FormView} from './FormView'
 import {StatView} from './StatView'
+import {SettingView} from './SettingView'
 import {PrintView} from '../Print/PrintView'
 import {Button} from '@/components/ui/button'
 import {Card} from '@/components/ui/card'
@@ -181,7 +182,7 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
                         searchKeyword={searchValues.map(v => v.value).join(' ')}
                         setSearchKeyword={() => {}}
                         filterValues={filterValues}
-                        groupByField={groupByField || undefined}
+                        groupByField={config.kanbanViewConfig.groupByField ?? groupByField ?? undefined}
                         onCardClick={handleRowClick}
                         onCardEdit={handleEdit}
                     />
@@ -239,6 +240,16 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
                     />
                 )
 
+            case 'setting':
+                if (!config.settingViewConfig) {
+                    return <div className="text-center py-8 text-muted-foreground">SettingView config not provided</div>
+                }
+                return (
+                    <SettingView
+                        config={config.settingViewConfig}
+                    />
+                )
+
             default:
                 return <div className="text-center py-8 text-muted-foreground">Unknown view type</div>
         }
@@ -268,7 +279,7 @@ export function ResourceView({config, onEdit, onCreate, onDelete, loading, entit
     }, [viewType, viewButtons])
 
     const renderHeader = () => {
-        if (viewType === 'form' || viewType === 'custom') return null
+        if (viewType === 'form' || viewType === 'custom' || viewType === 'setting') return null
 
         return (
             <div className="flex items-center justify-between gap-4 px-6 pt-2">

@@ -17,6 +17,7 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
     onCardDelete: configOnCardDelete,
     onStateChange,
     renderCard,
+    columnLabels,
     cardWidth = 280,
     columnWidth = 320,
     draggable = true,
@@ -74,7 +75,7 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
       
       return uniqueValues.map((value, index) => ({
         id: String(value),
-        title: String(value),
+        title: config.columnLabels?.[String(value)] ?? String(value),
         state: String(value),
         color: ['blue', 'green', 'yellow', 'red', 'purple', 'orange'][index % 6]
       }))

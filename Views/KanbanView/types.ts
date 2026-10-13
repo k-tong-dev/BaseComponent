@@ -23,6 +23,8 @@ export interface KanbanCard {
 export interface KanbanViewConfig {
   data: any[]
   groupByField?: string  // Field to group by - if set, columns are auto-generated. If not set, displays as grid
+  /** Map raw field values to friendly column titles. E.g. { true: 'Active', false: 'Inactive' } */
+  columnLabels?: Record<string, string>
   onCardClick?: (card: KanbanCard) => void
   onCardEdit?: (card: KanbanCard) => void
   onCardDelete?: (card: KanbanCard) => void
