@@ -315,9 +315,9 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
     const filteredData = kanbanData['all'] || data
     return (
       <div className="w-full h-full p-4">
-        <div className="flex flex-wrap gap-4">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
           {filteredData.map(item => (
-            <div key={getItemValue(item)} className="w-full md:w-[calc(50%-8px)]" style={{ maxWidth: cardWidth }}>
+            <div key={getItemValue(item)} className="w-full">
               {renderCard({ id: getItemValue(item), data: item, showDragHandle: true, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
             </div>
           ))}
