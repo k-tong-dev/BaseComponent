@@ -317,8 +317,8 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
       <div className="w-full h-full p-4">
         <div className="flex flex-wrap gap-4">
           {filteredData.map(item => (
-            <div key={getItemValue(item)} style={{ width: cardWidth }}>
-              {renderCard({ id: getItemValue(item), data: item, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
+            <div key={getItemValue(item)} className="w-full md:w-[calc(50%-8px)]" style={{ maxWidth: cardWidth }}>
+              {renderCard({ id: getItemValue(item), data: item, showDragHandle: true, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
             </div>
           ))}
         </div>
@@ -390,7 +390,6 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
                     <KanbanItem
                       key={getItemValue(item)}
                       value={getItemValue(item)}
-                      asHandle={draggable}
                     >
                       {renderCard({ id: getItemValue(item), data: item, state: column.title, showDragHandle: true, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
                     </KanbanItem>
