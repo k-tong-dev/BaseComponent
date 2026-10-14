@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useMemo, useRef } from 'react'
-import { Kanban, KanbanBoard, KanbanColumn, KanbanItem, KanbanOverlay } from './kanban'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Kanban, KanbanBoard, KanbanColumn, KanbanItem, KanbanItemHandle, KanbanOverlay } from './kanban'
 import { Input } from 'rsuite'
-import { Search } from 'lucide-react'
+import { Search, GripVertical } from 'lucide-react'
 import { KanbanViewProps, KanbanMode, KanbanColumn as KanbanColumnType } from './types'
 import { cn } from '@/lib/utils'
+
+/** Stable empty array so the filter effect does not re-run every render. */
+const EMPTY_FILTER_VALUES: { fieldKey: string; operator: string; value: any }[] = []
 
 export function KanbanView({ config, loading, showFilterPanel, setShowFilterPanel, searchKeyword, setSearchKeyword, filterValues, groupByField, onCardClick: externalOnCardClick, onCardEdit: externalOnCardEdit, onCardDelete: externalOnCardDelete }: KanbanViewProps & { showFilterPanel?: boolean; setShowFilterPanel?: (show: boolean) => void; searchKeyword?: string; setSearchKeyword?: (keyword: string) => void; filterValues?: {fieldKey: string; operator: string; value: any}[]; groupByField?: string }) {
   const {
@@ -48,6 +49,9 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
       configOnCardDelete(card)
     }
   }
+
+  const getItemValue = (item: any) => item.id || item._id
+
   const columns = useMemo(() => {
     if (groupByField && data.length > 0) {
       // Get unique values from groupByField
@@ -96,7 +100,7 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
   const setFilterPanelVisible = setShowFilterPanel || setLocalShowFilterPanel
   const currentSearchKeyword = searchKeyword !== undefined ? searchKeyword : localSearchKeyword
   const setCurrentSearchKeyword = setSearchKeyword || setLocalSearchKeyword
-  const currentFilterValues = filterValues || []
+  const currentFilterValues = filterValues || EMPTY_FILTER_VALUES
 
   const [kanbanData, setKanbanData] = useState<Record<string, any[]>>(() => {
     // Apply search keyword filter
@@ -269,33 +273,50 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
     }
   }, [data, currentSearchKeyword, currentFilterValues, groupByField, columns])
 
+  /** Resolve which column currently holds the given item id. */
+  const columnIdForItem = (itemId: string): string | undefined => {
+    for (const [columnId, items] of Object.entries(kanbanData)) {
+      if (items.some((item: any) => String(getItemValue(item)) === itemId)) return columnId
+    }
+    return undefined
+  }
+
+  // The item's column is captured at drag start because `Kanban` optimistically
+  // moves the item into the hovered column during drag-over, so by drag end the
+  // original column is no longer derivable from state.
+  const dragSourceColumnRef = useRef<string | null>(null)
+
+  const handleDragStart = (event: any) => {
+    dragSourceColumnRef.current = columnIdForItem(String(event.active.id)) ?? null
+  }
+
   const handleDragEnd = async (event: any) => {
     if (!draggable || !groupByField || !onStateChange) return
 
     const { active, over } = event
+    const sourceColumnId = dragSourceColumnRef.current
+    dragSourceColumnRef.current = null
     if (!over) return
 
-    const activeColumn = columns.find((col: any) => col.id === active.id)
-    const overColumn = columns.find((col: any) => col.id === over.id)
+    const activeId = String(active.id)
+    const overId = String(over.id)
 
-    if (!activeColumn || !overColumn || activeColumn.id === overColumn.id) return
+    // `over` may be a column id or an item id — resolve both to a column id.
+    const targetColumnId =
+      columns.find((col: any) => String(col.id) === overId)?.id ?? columnIdForItem(overId)
 
-    // Find the item being moved
-    const movedItem = kanbanData[activeColumn.id]?.find((item: any) => getItemValue(item) === active.data?.current?.value)
-    if (!movedItem) return
+    if (!sourceColumnId || !targetColumnId || sourceColumnId === targetColumnId) return
 
-    // Update the item's groupByField value
-    const newValue = (overColumn as any).state
-    if (newValue && groupByField) {
-      await onStateChange(getItemValue(movedItem), newValue)
-    }
+    const targetColumn = columns.find((col: any) => String(col.id) === String(targetColumnId))
+    const newValue = (targetColumn as any)?.state
+    if (newValue === undefined || newValue === null) return
+
+    await onStateChange(activeId, newValue)
   }
 
   const handleValueChange = (newColumns: Record<string, any[]>) => {
     setKanbanData(newColumns)
   }
-
-  const getItemValue = (item: any) => item.id || item._id
 
   // Find active item for overlay
   const getActiveItem = () => {
@@ -318,7 +339,7 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
           {filteredData.map(item => (
             <div key={getItemValue(item)} className="w-full">
-              {renderCard({ id: getItemValue(item), data: item, showDragHandle: true, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
+              {renderCard({ id: getItemValue(item), data: item, showDragHandle: false, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
             </div>
           ))}
         </div>
@@ -332,6 +353,7 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
       <Kanban
         value={kanbanData}
         onValueChange={handleValueChange}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         getItemValue={getItemValue}
         orientation="horizontal"
@@ -390,8 +412,17 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
                     <KanbanItem
                       key={getItemValue(item)}
                       value={getItemValue(item)}
+                      className="relative group/kanban-item"
                     >
-                      {renderCard({ id: getItemValue(item), data: item, state: column.title, showDragHandle: true, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
+                      {draggable && (
+                        <KanbanItemHandle
+                          aria-label="Drag to move"
+                          className="absolute left-2 top-2 z-20 rounded-md p-1 text-muted-foreground/40 transition-opacity hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover/kanban-item:opacity-100 md:focus-visible:opacity-100"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </KanbanItemHandle>
+                      )}
+                      {renderCard({ id: getItemValue(item), data: item, state: column.title, showDragHandle: false, onCardClick: handleCardClick, onCardEdit: handleCardEdit, onCardDelete: handleCardDelete })}
                     </KanbanItem>
                   ))}
                 </div>
@@ -411,20 +442,25 @@ export function KanbanView({ config, loading, showFilterPanel, setShowFilterPane
               ) : null
             }
             if (variant === 'item') {
-              for (const [columnId, items] of Object.entries(kanbanData)) {
+              for (const items of Object.values(kanbanData)) {
                 const item = items.find(i => getItemValue(i) === value)
                 if (item) {
+                  // Render the real card so the whole component follows the cursor,
+                  // and disable pointer events so the overlay never blocks clicks or drops.
                   return (
-                    <Card className="p-3 shadow-xl cursor-grabbing w-64">
-                      <div className="space-y-2">
-                        <div className="font-medium">{item.name || item.title || 'Untitled'}</div>
-                        {item.description && (
-                          <div className="text-sm text-muted-foreground line-clamp-2">
-                            {item.description}
-                          </div>
-                        )}
-                      </div>
-                    </Card>
+                    <div
+                      className="pointer-events-none cursor-grabbing opacity-90 shadow-2xl [&_*]:pointer-events-none"
+                      style={{ width: columnWidth - 16 }}
+                    >
+                      {renderCard({
+                        id: getItemValue(item),
+                        data: item,
+                        showDragHandle: false,
+                        onCardClick: handleCardClick,
+                        onCardEdit: handleCardEdit,
+                        onCardDelete: handleCardDelete,
+                      })}
+                    </div>
                   )
                 }
               }
